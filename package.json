@@ -3,10 +3,15 @@
   "private": false,
   "version": "0.1.0",
   "description": "Framework-agnostic WYSIWYM document editor and .ophx archive tools, powered by Tiptap",
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/ophx-editor.cjs",
+  "module": "./dist/ophx-editor.js",
   "types": "./dist/types/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "exports": {
     ".": {
@@ -14,13 +19,47 @@
       "import": "./dist/ophx-editor.js",
       "require": "./dist/ophx-editor.cjs"
     },
-    "./style.css": "./dist/ophx-editor.css"
+    "./style.css": "./dist/ophx-editor.css",
+    "./standalone": {
+      "import": "./dist/ophx-editor.standalone.js",
+      "default": "./dist/ophx-editor.iife.js"
+    },
+    "./package.json": "./package.json"
   },
+  "unpkg": "./dist/ophx-editor.iife.js",
+  "jsdelivr": "./dist/ophx-editor.iife.js",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mars102/pluginEditor.git"
+  },
+  "homepage": "https://github.com/mars102/pluginEditor#readme",
+  "bugs": {
+    "url": "https://github.com/mars102/pluginEditor/issues"
+  },
+  "keywords": [
+    "tiptap",
+    "editor",
+    "wysiwyg",
+    "wysiwym",
+    "ophx",
+    "document-editor"
+  ],
+  "author": "mars102",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && tsc -p tsconfig.types.json && node scripts/copy-css-types.mjs && vite build --config vite.lib.config.ts",
+    "build": "rm -rf dist dist-demo && npm run typecheck && vite build --config vite.config.ts && tsc -p tsconfig.types.json && node scripts/copy-css-types.mjs && vite build --config vite.lib.config.ts && vite build --config vite.standalone.config.ts && rm -f dist/favicon.svg dist/icons.svg",
+    "build:demo": "vite build --config vite.config.ts",
+    "build:lib": "rm -rf dist && npm run typecheck && tsc -p tsconfig.types.json && node scripts/copy-css-types.mjs && vite build --config vite.lib.config.ts && vite build --config vite.standalone.config.ts && rm -f dist/favicon.svg dist/icons.svg",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build:lib",
+    "prepublishOnly": "npm run build:lib"
   },
   "devDependencies": {
     "typescript": "~7.0.2",
@@ -37,6 +76,7 @@
     "@tiptap/extension-table-header": "^3.33.0",
     "@tiptap/extension-table-row": "^3.33.0",
     "@tiptap/extension-underline": "^3.33.0",
+    "@tiptap/pm": "^3.33.0",
     "@tiptap/starter-kit": "^3.33.0",
     "jszip": "^3.10.2"
   }

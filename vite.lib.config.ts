@@ -12,6 +12,7 @@ export default defineConfig({
       external: [
         '@tiptap/core',
         '@tiptap/starter-kit',
+        '@tiptap/extension-heading',
         '@tiptap/extension-underline',
         '@tiptap/extension-link',
         '@tiptap/extension-image',

@@ -1,5 +1,68 @@
 # @ophx/editor
 
+## Установка
+
+### npm + любой сборщик
+
+```bash
+npm i @ophx/editor
+```
+
+```ts
+import { OphxEditor, mountToolbar } from '@ophx/editor'
+import '@ophx/editor/style.css'
+
+const editor = new OphxEditor({
+  element: document.querySelector('#editor')!,
+  content: '<h1>Документ</h1><p>Текст…</p>',
+})
+
+mountToolbar(document.querySelector('#toolbar')!, editor.editor)
+```
+
+### Vue 3 + TypeScript
+
+```vue
+<script setup lang="ts">
+import { onMounted, onBeforeUnmount } from 'vue'
+import { OphxEditor, mountToolbar } from '@ophx/editor'
+import '@ophx/editor/style.css'
+
+let editor: OphxEditor | null = null
+let unmountToolbar: (() => void) | null = null
+
+onMounted(() => {
+  editor = new OphxEditor({ element: document.querySelector('#editor')! })
+  unmountToolbar = mountToolbar(document.querySelector('#toolbar')!, editor.editor)
+})
+
+onBeforeUnmount(() => {
+  unmountToolbar?.()
+  editor?.destroy()
+})
+</script>
+```
+
+### CDN без сборщика
+
+```html
+<link rel="stylesheet" href="https://unpkg.com/@ophx/editor@0.1.0/dist/ophx-editor.css">
+<script src="https://unpkg.com/@ophx/editor@0.1.0/dist/ophx-editor.iife.js"></script>
+<script>
+  const editor = new OphxEditor.OphxEditor({ element: document.querySelector('#editor') })
+  OphxEditor.mountToolbar(document.querySelector('#toolbar'), editor.editor)
+</script>
+```
+
+Аналогично для jsDelivr:
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ophx/editor@0.1.0/dist/ophx-editor.css">
+<script src="https://cdn.jsdelivr.net/npm/@ophx/editor@0.1.0/dist/ophx-editor.iife.js"></script>
+```
+
+> Для CDN лучше жёстко фиксировать версию, чтобы обновления не ломали существующий код.
+
 Переносимый WYSIWYM-редактор на Tiptap. Ядро не зависит от React, Vue, Svelte или другого UI-фреймворка: ему нужен только DOM-контейнер. Панель инструментов опциональна — можно использовать готовую `mountToolbar()` или построить собственный интерфейс поверх публичного Tiptap instance.
 
 ## Возможности
@@ -24,7 +87,7 @@ npm run typecheck
 npm run build
 ```
 
-Vite демо показывает подключение без UI-фреймворка. `npm run build` собирает демо и пакет в `dist/`.
+`npm run build` собирает демо в `dist-demo/` и библиотеку/standalone-бандлы в `dist/`.
 
 ## Подключение без фреймворка
 
