@@ -1,0 +1,43 @@
+{
+  "name": "@ophx/editor",
+  "private": false,
+  "version": "0.1.0",
+  "description": "Framework-agnostic WYSIWYM document editor and .ophx archive tools, powered by Tiptap",
+  "type": "module",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/ophx-editor.js",
+      "require": "./dist/ophx-editor.cjs"
+    },
+    "./style.css": "./dist/ophx-editor.css"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && tsc -p tsconfig.types.json && node scripts/copy-css-types.mjs && vite build --config vite.lib.config.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.33.0",
+    "@tiptap/extension-heading": "^3.33.0",
+    "@tiptap/extension-image": "^3.33.0",
+    "@tiptap/extension-link": "^3.33.0",
+    "@tiptap/extension-placeholder": "^3.33.0",
+    "@tiptap/extension-table": "^3.33.0",
+    "@tiptap/extension-table-cell": "^3.33.0",
+    "@tiptap/extension-table-header": "^3.33.0",
+    "@tiptap/extension-table-row": "^3.33.0",
+    "@tiptap/extension-underline": "^3.33.0",
+    "@tiptap/starter-kit": "^3.33.0",
+    "jszip": "^3.10.2"
+  }
+}

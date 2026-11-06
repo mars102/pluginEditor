@@ -1,0 +1,91 @@
+.ophx-editor-surface {
+  min-height: 480px;
+  padding: clamp(24px, 5vw, 64px) clamp(22px, 8vw, 100px);
+  outline: 0;
+  color: #24262d;
+  background: #fff;
+  font: 16px/1.75 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.ophx-editor-surface > *:first-child { margin-top: 0; }
+.ophx-editor-surface p { margin: 0 0 0.8em; }
+.ophx-editor-surface h1, .ophx-editor-surface h2, .ophx-editor-surface h3,
+.ophx-editor-surface h4, .ophx-editor-surface h5, .ophx-editor-surface h6 {
+  margin: 1.4em 0 0.5em;
+  line-height: 1.25;
+  color: #191b23;
+  scroll-margin-top: 24px;
+}
+.ophx-editor-surface h1 { font-size: 2.15em; }
+.ophx-editor-surface h2 { font-size: 1.7em; }
+.ophx-editor-surface h3 { font-size: 1.35em; }
+.ophx-editor-surface [data-indent="1"] { margin-left: 2em; }
+.ophx-editor-surface [data-indent="2"] { margin-left: 4em; }
+.ophx-editor-surface [data-indent="3"] { margin-left: 6em; }
+.ophx-editor-surface [data-indent="4"] { margin-left: 8em; }
+.ophx-editor-surface [data-indent="5"] { margin-left: 10em; }
+.ophx-editor-surface [data-indent="6"] { margin-left: 12em; }
+.ophx-editor-surface [data-indent="7"] { margin-left: 14em; }
+.ophx-editor-surface [data-indent="8"] { margin-left: 16em; }
+.ophx-editor-surface ul, .ophx-editor-surface ol { padding-left: 1.6em; }
+.ophx-editor-surface a { color: #4359d6; text-decoration: underline; text-underline-offset: 3px; }
+.ophx-editor-surface img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+.ophx-editor-surface table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 1em 0; }
+.ophx-editor-surface th, .ophx-editor-surface td { border: 1px solid #dfe1e8; padding: 8px 10px; vertical-align: top; }
+.ophx-editor-surface th { background: #f5f6fa; font-weight: 650; }
+.ophx-editor-surface mark { border-radius: 3px; background: #fff1a8; padding: 0 2px; }
+.ophx-editor-surface mark[data-label="важно"] { background: #ffd9d9; }
+.ophx-editor-surface mark[data-label="идея"] { background: #d9f4e3; }
+.ophx-editor-surface .ophx-field { min-width: 4em; border-bottom: 1px dotted #888; outline: none; }
+.ophx-editor-surface .ophx-field:focus { border-bottom-style: solid; }
+.ophx-editor-surface .ophx-field:empty::before { content: attr(data-ophx-label); color: #aaa; }
+.ophx-editor-surface [data-collapsed="true"]::after { content: "  ▸"; color: #8b91a2; font-size: 0.7em; }
+.ophx-editor-surface .ophx-collapsed-content { display: none; }
+.ophx-editor-surface .ophx-search-match { background: #ffe580; border-radius: 2px; }
+.ophx-editor-surface .is-empty::before { content: attr(data-placeholder); color: #a4a8b3; float: left; height: 0; pointer-events: none; }
+
+.ophx-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e6e8ed;
+  background: #fff;
+  font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.ophx-toolbar__style, .ophx-toolbar__button {
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #3a3d48;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.ophx-toolbar__style { border-color: #e6e8ed; margin-right: 4px; }
+.ophx-toolbar__button:hover, .ophx-toolbar__button.is-active { background: #f1f3fa; border-color: #e1e4ee; }
+.ophx-toolbar__button:disabled { opacity: 0.38; cursor: default; }
+.ophx-toolbar__button:focus-visible, .ophx-toolbar__style:focus-visible { outline: 2px solid #5868db; outline-offset: 1px; }
+.ophx-toc {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 4px);
+  right: 12px;
+  display: grid;
+  min-width: 220px;
+  max-width: min(360px, 90vw);
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #e4e6ed;
+  border-radius: 9px;
+  background: white;
+  box-shadow: 0 12px 30px #1820441f;
+}
+.ophx-toc[hidden] { display: none; }
+.ophx-toc__item { padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; color: #373a46; cursor: pointer; }
+.ophx-toc__item:hover { background: #f2f4fa; }
