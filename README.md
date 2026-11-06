@@ -5,12 +5,12 @@
 ### npm + любой сборщик
 
 ```bash
-npm i @ophx/editor
+npm i @phenix1024/editor
 ```
 
 ```ts
-import { OphxEditor, mountToolbar } from '@ophx/editor'
-import '@ophx/editor/style.css'
+import { OphxEditor, mountToolbar } from '@phenix1024/editor'
+import '@phenix1024/editor/style.css'
 
 const editor = new OphxEditor({
   element: document.querySelector('#editor')!,
@@ -25,8 +25,8 @@ mountToolbar(document.querySelector('#toolbar')!, editor.editor)
 ```vue
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from 'vue'
-import { OphxEditor, mountToolbar } from '@ophx/editor'
-import '@ophx/editor/style.css'
+import { OphxEditor, mountToolbar } from '@phenix1024/editor'
+import '@phenix1024/editor/style.css'
 
 let editor: OphxEditor | null = null
 let unmountToolbar: (() => void) | null = null
@@ -46,8 +46,8 @@ onBeforeUnmount(() => {
 ### CDN без сборщика
 
 ```html
-<link rel="stylesheet" href="https://unpkg.com/@ophx/editor@0.1.0/dist/ophx-editor.css">
-<script src="https://unpkg.com/@ophx/editor@0.1.0/dist/ophx-editor.iife.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phenix1024/editor@0.1.0/dist/ophx-editor.css">
+<script src="https://unpkg.com/@phenix1024/editor@0.1.0/dist/ophx-editor.iife.js"></script>
 <script>
   const editor = new OphxEditor.OphxEditor({ element: document.querySelector('#editor') })
   OphxEditor.mountToolbar(document.querySelector('#toolbar'), editor.editor)
@@ -57,8 +57,8 @@ onBeforeUnmount(() => {
 Аналогично для jsDelivr:
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ophx/editor@0.1.0/dist/ophx-editor.css">
-<script src="https://cdn.jsdelivr.net/npm/@ophx/editor@0.1.0/dist/ophx-editor.iife.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.1.0/dist/ophx-editor.css">
+<script src="https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.1.0/dist/ophx-editor.iife.js"></script>
 ```
 
 > Для CDN лучше жёстко фиксировать версию, чтобы обновления не ломали существующий код.
@@ -143,7 +143,7 @@ export function DocumentEditor() {
 ```
 
 ```ts
-import { exportOphx, importOphx, downloadBlob } from '@ophx/editor'
+import { exportOphx, importOphx, downloadBlob } from '@phenix1024/editor'
 
 const archive = await exportOphx(editor.getHTML(), {
   filename: 'Договор', // basename должен совпадать с именем скачиваемого .ophx

@@ -1,5 +1,5 @@
 {
-  "name": "@ophx/editor",
+  "name": "@phenix1024/editor",
   "private": false,
   "version": "0.1.0",
   "description": "Framework-agnostic WYSIWYM document editor and .ophx archive tools, powered by Tiptap",
