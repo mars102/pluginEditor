@@ -1,5 +1,6 @@
 import { Extension, Mark, Node } from '@tiptap/core'
 import Heading from '@tiptap/extension-heading'
+import Image from '@tiptap/extension-image'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 
@@ -46,6 +47,163 @@ function fieldAttributes() {
 }
 
 const FIELD_ID_PATTERN = /^[A-Za-z0-9._-]+$/
+
+const IMAGE_WIDTH_MIN = 50
+const IMAGE_WIDTH_MAX = 1200
+type ImageTextWrap = 'none' | 'left' | 'right'
+type ImageAlignment = 'left' | 'center' | 'right'
+
+function parseImageWidth(value: string | null): number | null {
+  if (!value || !/^\d+$/.test(value)) return null
+  const width = Number(value)
+  return Number.isInteger(width) && width >= IMAGE_WIDTH_MIN && width <= IMAGE_WIDTH_MAX ? width : null
+}
+
+/** Image node with portable width and text-wrapping attributes. */
+export const OphxImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (element: HTMLElement) => parseImageWidth(element.getAttribute('width')),
+        renderHTML: (attributes: { width?: number | null }) => {
+          const width = attributes.width
+          return Number.isInteger(width) && Number(width) >= IMAGE_WIDTH_MIN && Number(width) <= IMAGE_WIDTH_MAX
+            ? { width: String(width) }
+            : {}
+        },
+      },
+      textWrap: {
+        default: 'none' as ImageTextWrap,
+        parseHTML: (element: HTMLElement): ImageTextWrap => {
+          const value = element.getAttribute('data-ophx-wrap')
+          return value === 'left' || value === 'right' ? value : 'none'
+        },
+        renderHTML: (attributes: { textWrap?: ImageTextWrap }) => ({
+          'data-ophx-wrap': attributes.textWrap === 'left' || attributes.textWrap === 'right'
+            ? attributes.textWrap
+            : 'none',
+        }),
+      },
+      alignment: {
+        default: 'left' as ImageAlignment,
+        parseHTML: (element: HTMLElement): ImageAlignment => {
+          const value = element.getAttribute('data-ophx-align')
+          return value === 'center' || value === 'right' ? value : 'left'
+        },
+        renderHTML: (attributes: { alignment?: ImageAlignment }) => ({
+          'data-ophx-align': attributes.alignment === 'center' || attributes.alignment === 'right'
+            ? attributes.alignment
+            : 'left',
+        }),
+      },
+    }
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      let currentNode = node
+      let dragStartX = 0
+      let dragStartWidth = 0
+      let lastWidth = 0
+
+      const wrapper = document.createElement('div')
+      wrapper.className = 'ophx-image-node'
+      wrapper.contentEditable = 'false'
+
+      const image = document.createElement('img')
+      const resizeHandle = document.createElement('button')
+      resizeHandle.type = 'button'
+      resizeHandle.className = 'ophx-image-node__resize-handle'
+      resizeHandle.setAttribute('role', 'slider')
+      resizeHandle.setAttribute('aria-label', 'Изменить размер изображения перетаскиванием')
+      resizeHandle.setAttribute('aria-valuemin', String(IMAGE_WIDTH_MIN))
+      resizeHandle.setAttribute('aria-valuemax', String(IMAGE_WIDTH_MAX))
+      resizeHandle.title = 'Потяните влево или вправо, чтобы изменить размер'
+      resizeHandle.innerHTML = '<svg viewBox="0 0 12 28" aria-hidden="true"><path d="M4 3v22M8 3v22"/></svg>'
+      wrapper.append(image, resizeHandle)
+
+      const renderNode = () => {
+        const src = String(currentNode.attrs.src ?? '')
+        if (image.getAttribute('src') !== src) image.setAttribute('src', src)
+        image.alt = currentNode.attrs.alt ?? ''
+        if (currentNode.attrs.title) image.title = currentNode.attrs.title
+        else image.removeAttribute('title')
+        if (currentNode.attrs.width) image.width = Number(currentNode.attrs.width)
+        else image.removeAttribute('width')
+        const displayedWidth = Number(currentNode.attrs.width) || Math.round(image.getBoundingClientRect().width)
+        resizeHandle.setAttribute('aria-valuenow', String(displayedWidth))
+        resizeHandle.setAttribute('aria-valuetext', `${displayedWidth} пикселей`)
+        wrapper.dataset.ophxWrap = currentNode.attrs.textWrap ?? 'none'
+        wrapper.dataset.ophxAlign = currentNode.attrs.alignment ?? 'left'
+      }
+
+      const updateWidth = (width: number) => {
+        const position = typeof getPos === 'function' ? getPos() : undefined
+        if (typeof position !== 'number') return
+        const existing = editor.state.doc.nodeAt(position)
+        if (!existing || existing.type.name !== 'image') return
+        const editorStyle = getComputedStyle(editor.view.dom)
+        const horizontalPadding = Number.parseFloat(editorStyle.paddingLeft) + Number.parseFloat(editorStyle.paddingRight)
+        const availableWidth = Math.max(IMAGE_WIDTH_MIN, editor.view.dom.clientWidth - horizontalPadding)
+        const constrainedWidth = Math.min(width, IMAGE_WIDTH_MAX, Math.floor(availableWidth))
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, { ...existing.attrs, width: constrainedWidth }))
+      }
+
+      const onPointerMove = (event: PointerEvent) => {
+        if (!resizeHandle.hasPointerCapture(event.pointerId)) return
+        const width = Math.max(50, Math.round((dragStartWidth + event.clientX - dragStartX) / 5) * 5)
+        if (width === lastWidth) return
+        lastWidth = width
+        updateWidth(width)
+      }
+      const stopDragging = (event: PointerEvent) => {
+        if (resizeHandle.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId)
+      }
+      resizeHandle.addEventListener('pointerdown', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        dragStartX = event.clientX
+        dragStartWidth = image.getBoundingClientRect().width
+        lastWidth = Math.round(dragStartWidth)
+        resizeHandle.setPointerCapture(event.pointerId)
+      })
+      resizeHandle.addEventListener('pointermove', onPointerMove)
+      resizeHandle.addEventListener('pointerup', stopDragging)
+      resizeHandle.addEventListener('pointercancel', stopDragging)
+      resizeHandle.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+        event.preventDefault()
+        const currentWidth = Number(currentNode.attrs.width) || Math.round(image.getBoundingClientRect().width)
+        const delta = event.key === 'ArrowRight' ? 10 : -10
+        updateWidth(Math.max(IMAGE_WIDTH_MIN, currentWidth + delta))
+      })
+      image.addEventListener('load', () => {
+        if (currentNode.attrs.width) return
+        const width = Math.round(image.getBoundingClientRect().width)
+        resizeHandle.setAttribute('aria-valuenow', String(width))
+        resizeHandle.setAttribute('aria-valuetext', `${width} пикселей`)
+      })
+      renderNode()
+
+      return {
+        dom: wrapper,
+        update(updatedNode) {
+          if (updatedNode.type !== currentNode.type) return false
+          currentNode = updatedNode
+          renderNode()
+          return true
+        },
+        stopEvent(event) {
+          return resizeHandle.contains(event.target as globalThis.Node)
+        },
+        ignoreMutation() {
+          return true
+        },
+      }
+    }
+  },
+})
 
 /** Inline template field: its textual value stays editable inside the editor. */
 export const OphxInlineField = Node.create({

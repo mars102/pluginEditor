@@ -2,7 +2,7 @@ import './demo.css'
 import { downloadBlob, exportOphx, importOphx, mountToolbar, OphxEditor } from './index'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
-const DEFAULT_DOCUMENT_CSS = `body{font-family:Arial,sans-serif;line-height:1.7;color:#24262d;max-width:900px;margin:48px auto;padding:0 24px}h1,h2,h3{line-height:1.25;color:#191b23}img{max-width:100%;height:auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dfe1e8;padding:8px}mark{background:#fff1a8}`
+const DEFAULT_DOCUMENT_CSS = `body{font-family:Arial,sans-serif;line-height:1.7;color:#24262d;max-width:900px;margin:48px auto;padding:0 24px}h1,h2,h3{line-height:1.25;color:#191b23}img{max-width:100%;height:auto}img[data-ophx-wrap="left"]{float:left;margin:4px 16px 12px 0}img[data-ophx-wrap="right"]{float:right;margin:4px 0 12px 16px}img[data-ophx-wrap="none"][data-ophx-align="center"]{display:block;margin-left:auto;margin-right:auto}img[data-ophx-wrap="none"][data-ophx-align="right"]{display:block;margin-left:auto;margin-right:0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dfe1e8;padding:8px}mark{background:#fff1a8}`
 app.innerHTML = `
   <div class="workspace">
     <header class="topbar">

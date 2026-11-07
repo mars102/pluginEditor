@@ -2,7 +2,6 @@ import { Editor, type Content, type EditorOptions } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
@@ -12,6 +11,7 @@ import {
   CollapsibleHeading,
   Indentation,
   Label,
+  OphxImage,
   OphxBlockField,
   OphxEditability,
   OphxInlineField,
@@ -52,7 +52,7 @@ export class OphxEditor {
         CollapsibleHeading.configure({ levels: [1, 2, 3, 4, 5, 6] }),
         Underline,
         Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
-        Image.configure({ allowBase64: true, inline: false }),
+        OphxImage.configure({ allowBase64: true, inline: false }),
         Table.configure({ resizable: true }),
         TableRow,
         TableHeader,
