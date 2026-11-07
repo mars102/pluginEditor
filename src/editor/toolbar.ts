@@ -159,6 +159,10 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
         openLinkPopover()
         return
       }
+      if (item.action === 'table') {
+        openTablePopover()
+        return
+      }
       runAction(item.action, editor, imageInput, toc)
     })
     buttons.set(item.action, button)
@@ -199,6 +203,150 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     imageInput.value = ''
   })
   host.append(imageInput)
+
+  const tablePopover = document.createElement('form')
+  tablePopover.className = 'ophx-table-popover'
+  tablePopover.setAttribute('aria-label', 'Создать таблицу')
+  tablePopover.hidden = true
+  tablePopover.innerHTML = `
+    <label class="ophx-table-popover__label">Строки<input name="rows" type="number" min="1" max="30" value="3" required></label>
+    <label class="ophx-table-popover__label">Столбцы<input name="cols" type="number" min="1" max="20" value="3" required></label>
+    <label class="ophx-table-popover__header"><input name="header" type="checkbox" checked> Заголовок таблицы</label>
+    <button class="ophx-table-popover__insert" type="submit">Вставить таблицу</button>
+  `
+  document.body.append(tablePopover)
+  const tableButton = buttons.get('table')!
+  const tableRowsInput = tablePopover.querySelector<HTMLInputElement>('input[name="rows"]')!
+  const tableColsInput = tablePopover.querySelector<HTMLInputElement>('input[name="cols"]')!
+  const tableHeaderInput = tablePopover.querySelector<HTMLInputElement>('input[name="header"]')!
+
+  const positionTablePopover = () => {
+    if (tablePopover.hidden) return
+    const rect = tableButton.getBoundingClientRect()
+    const width = tablePopover.offsetWidth
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
+    tablePopover.style.left = `${left}px`
+    tablePopover.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - tablePopover.offsetHeight - 8)}px`
+  }
+
+  function closeTablePopover(): void {
+    tablePopover.hidden = true
+    tableButton.setAttribute('aria-expanded', 'false')
+    window.removeEventListener('resize', positionTablePopover)
+    document.removeEventListener('scroll', positionTablePopover, true)
+  }
+
+  function openTablePopover(): void {
+    if (!tablePopover.hidden) {
+      closeTablePopover()
+      return
+    }
+    tablePopover.hidden = false
+    tableButton.setAttribute('aria-expanded', 'true')
+    positionTablePopover()
+    window.addEventListener('resize', positionTablePopover)
+    document.addEventListener('scroll', positionTablePopover, true)
+    tableRowsInput.focus()
+    tableRowsInput.select()
+  }
+
+  tableButton.setAttribute('aria-haspopup', 'dialog')
+  tableButton.setAttribute('aria-expanded', 'false')
+  tablePopover.addEventListener('mousedown', (event) => event.stopPropagation())
+  tablePopover.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const rows = Math.max(1, Math.min(30, Number(tableRowsInput.value) || 1))
+    const cols = Math.max(1, Math.min(20, Number(tableColsInput.value) || 1))
+    tableRowsInput.value = String(rows)
+    tableColsInput.value = String(cols)
+    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: tableHeaderInput.checked }).run()
+    closeTablePopover()
+  })
+  tablePopover.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeTablePopover()
+      tableButton.focus()
+    }
+  })
+  const handleTableOutsideClick = (event: MouseEvent) => {
+    const target = event.target as Node
+    if (!tablePopover.contains(target) && !tableButton.contains(target)) closeTablePopover()
+  }
+  document.addEventListener('click', handleTableOutsideClick)
+
+  const tableContextPopover = document.createElement('div')
+  tableContextPopover.className = 'ophx-table-context'
+  tableContextPopover.setAttribute('role', 'toolbar')
+  tableContextPopover.setAttribute('aria-label', 'Действия с таблицей')
+  tableContextPopover.hidden = true
+  tableContextPopover.innerHTML = `
+    <button type="button" data-command="addRow" aria-label="Добавить строку ниже" title="Добавить строку ниже"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H4zM4 10h16M10 4v12M12 20v-4M10 18h4"/></svg></button>
+    <button type="button" data-command="deleteRow" aria-label="Удалить строку" title="Удалить строку"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H4zM4 10h16M10 4v12M10 20h4"/></svg></button>
+    <span class="ophx-table-context__divider" aria-hidden="true"></span>
+    <button type="button" data-command="addColumn" aria-label="Добавить столбец справа" title="Добавить столбец справа"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v16H4zM10 4v16M20 12h-4M18 10v4"/></svg></button>
+    <button type="button" data-command="deleteColumn" aria-label="Удалить столбец" title="Удалить столбец"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v16H4zM10 4v16M18 10v4"/></svg></button>
+  `
+  document.body.append(tableContextPopover)
+
+  const activeTableElement = (): HTMLTableElement | null => {
+    const { $from } = editor.state.selection
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      if ($from.node(depth).type.name !== 'table') continue
+      const dom = editor.view.nodeDOM($from.before(depth))
+      return dom instanceof HTMLTableElement ? dom : dom instanceof HTMLElement ? dom.querySelector('table') : null
+    }
+    return null
+  }
+
+  const positionTableContextPopover = () => {
+    if (tableContextPopover.hidden) return
+    const table = activeTableElement()
+    if (!table) return
+    const rect = table.getBoundingClientRect()
+    const padding = 8
+    const width = tableContextPopover.offsetWidth
+    const height = tableContextPopover.offsetHeight
+    const left = Math.max(padding, Math.min(rect.left, window.innerWidth - width - padding))
+    const above = rect.top - height - 8 >= padding
+    const top = above ? rect.top - height - 8 : Math.min(rect.bottom + 8, window.innerHeight - height - padding)
+    tableContextPopover.style.left = `${left}px`
+    tableContextPopover.style.top = `${Math.max(padding, top)}px`
+  }
+
+  const syncTableContextPopover = () => {
+    if (!editor.isActive('table')) {
+      tableContextPopover.hidden = true
+      window.removeEventListener('resize', positionTableContextPopover)
+      document.removeEventListener('scroll', positionTableContextPopover, true)
+      return
+    }
+    tableContextPopover.hidden = false
+    positionTableContextPopover()
+    window.addEventListener('resize', positionTableContextPopover)
+    document.addEventListener('scroll', positionTableContextPopover, true)
+  }
+
+  tableContextPopover.addEventListener('mousedown', (event) => event.preventDefault())
+  tableContextPopover.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-command]')
+    if (!button) return
+    const command = button.dataset.command
+    const chain = editor.chain().focus()
+    if (command === 'addRow') chain.addRowAfter().run()
+    else if (command === 'deleteRow') chain.deleteRow().run()
+    else if (command === 'addColumn') chain.addColumnAfter().run()
+    else if (command === 'deleteColumn') chain.deleteColumn().run()
+  })
+  const handleTableContextOutsideClick = (event: MouseEvent) => {
+    if (tableContextPopover.hidden) return
+    const target = event.target as Node
+    const table = activeTableElement()
+    if (!tableContextPopover.contains(target) && !table?.contains(target)) {
+      tableContextPopover.hidden = true
+    }
+  }
+  document.addEventListener('click', handleTableContextOutsideClick)
 
   const imagePopover = document.createElement('div')
   imagePopover.className = 'ophx-image-popover'
@@ -484,6 +632,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   const refresh = () => {
     buttons.get('undo')!.disabled = !editor.can().undo()
     buttons.get('redo')!.disabled = !editor.can().redo()
+    syncTableContextPopover()
     if (!editor.isActive('image')) closeImagePopover()
     else if (imagePopover.hidden) openImagePopover()
     else {
@@ -536,6 +685,13 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   return () => {
     editor.off('transaction', handleTransaction)
     editor.off('selectionUpdate', handleSelectionUpdate)
+    document.removeEventListener('click', handleTableOutsideClick)
+    closeTablePopover()
+    tablePopover.remove()
+    document.removeEventListener('click', handleTableContextOutsideClick)
+    window.removeEventListener('resize', positionTableContextPopover)
+    document.removeEventListener('scroll', positionTableContextPopover, true)
+    tableContextPopover.remove()
     document.removeEventListener('click', handleImageOutsideClick)
     closeImagePopover()
     imagePopover.remove()
@@ -594,7 +750,6 @@ function runAction(action: string, editor: Editor, imageInput: HTMLInputElement,
       imageInput.click()
       break
     }
-    case 'table': chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break
     case 'collapse': {
       if (!editor.isActive('heading')) return
       const collapsed = Boolean(editor.getAttributes('heading').collapsed)
