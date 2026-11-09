@@ -281,8 +281,8 @@ onBeforeUnmount(() => editor?.destroy())
 ### Без сборщика (CDN)
 
 ```html
-<link rel="stylesheet" href="https://unpkg.com/@phenix1024/editor@0.3.2/dist/ophx-editor.css">
-<script src="https://unpkg.com/@phenix1024/editor@0.3.2/dist/ophx-editor.iife.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phenix1024/editor@0.3.3/dist/ophx-editor.css">
+<script src="https://unpkg.com/@phenix1024/editor@0.3.3/dist/ophx-editor.iife.js"></script>
 
 <div id="toolbar"></div>
 <div id="editor"></div>
@@ -291,7 +291,7 @@ onBeforeUnmount(() => editor?.destroy())
 </script>
 ```
 
-Через jsDelivr: `https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.3.2/dist/...`. Версию в ссылке лучше фиксировать.
+Через jsDelivr: `https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.3.3/dist/...`. Версию в ссылке лучше фиксировать.
 
 ## API
 
