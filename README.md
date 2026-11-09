@@ -10,6 +10,8 @@
 
 ![Редактор с панелью инструментов и шаблоном договора в режиме заполнения](https://raw.githubusercontent.com/mars102/pluginEditor/main/docs/screenshot.png)
 
+**Живое демо:** [investhold.ru/editor](https://investhold.ru/editor)
+
 ## Установка
 
 ```bash
