@@ -7,6 +7,7 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
+import { mountToolbar, type ToolbarOptions } from './toolbar'
 import { downloadBlob, exportOphx, importOphx, type OphxDocument, type OphxExportOptions } from './ophx-archive'
 import {
   CollapsibleHeading,
@@ -31,7 +32,15 @@ export interface OphxFieldValue {
 }
 
 export interface OphxEditorOptions {
-  element: HTMLElement
+  /** Container for the document: an element or a CSS selector. */
+  element: HTMLElement | string
+  /**
+   * Built-in toolbar container (element or CSS selector). When set, the toolbar is mounted
+   * automatically and removed by destroy().
+   */
+  toolbar?: HTMLElement | string
+  /** Options for the built-in toolbar, e.g. a custom image upload handler. */
+  toolbarOptions?: ToolbarOptions
   content?: Content
   placeholder?: string
   /** Initial mode when nothing is stored yet. Defaults to true. */
@@ -50,6 +59,13 @@ export interface OphxSetContentOptions {
   emitUpdate?: boolean
 }
 
+function resolveElement(target: HTMLElement | string, option: string): HTMLElement {
+  if (typeof target !== 'string') return target
+  const element = document.querySelector<HTMLElement>(target)
+  if (!element) throw new Error(`OphxEditor: элемент для опции "${option}" не найден по селектору "${target}"`)
+  return element
+}
+
 const DEFAULT_EDITABLE_STORAGE_KEY = 'ophx-editor-editable'
 
 /** A framework-neutral Tiptap editor wrapper. UI is intentionally optional. */
@@ -57,13 +73,14 @@ export class OphxEditor {
   readonly editor: Editor
   private archiveDefaults: Pick<OphxExportOptions, 'filename' | 'title' | 'styles' | 'bodyContentEditable'> | null = null
   private readonly editableStorageKey: string | null
+  private unmountToolbar: (() => void) | null = null
 
   constructor(options: OphxEditorOptions) {
     this.editableStorageKey = options.editableStorageKey === undefined
       ? DEFAULT_EDITABLE_STORAGE_KEY
       : options.editableStorageKey
     this.editor = new Editor({
-      element: options.element,
+      element: resolveElement(options.element, 'element'),
       content: options.content ?? '<p></p>',
       editable: this.readStoredEditable() ?? options.editable ?? true,
       extensions: [
@@ -119,6 +136,9 @@ export class OphxEditor {
       onUpdate: options.onUpdate,
     })
     this.syncEditableControls()
+    if (options.toolbar) {
+      this.unmountToolbar = mountToolbar(resolveElement(options.toolbar, 'toolbar'), this.editor, options.toolbarOptions)
+    }
   }
 
   getHTML(): string {
@@ -267,6 +287,8 @@ export class OphxEditor {
   }
 
   destroy(): void {
+    this.unmountToolbar?.()
+    this.unmountToolbar = null
     this.editor.destroy()
   }
 }

@@ -1,223 +1,263 @@
 # @phenix1024/editor
 
-## Установка
+Редактор документов для браузера на базе [Tiptap](https://tiptap.dev). Работает без фреймворков (подойдут React, Vue, Svelte, Angular или чистый JS), ему нужен только DOM-элемент. Документы сохраняются в переносимый архив `.ophx` (HTML + CSS + изображения в одном ZIP).
 
-### npm + любой сборщик
+- Заголовки, списки, отступы, таблицы, изображения с обтеканием, ссылки и цветные метки.
+- Markdown-подобный ввод: `# ` даёт заголовок, `- ` маркированный список, `1. ` нумерованный.
+- Готовая панель инструментов: стиль текста, поиск с подсветкой, содержание, отмена и повтор.
+- Режим просмотра, который запоминается между перезагрузками страницы.
+- Поля шаблонов: заполняемые места в документе, сбор значений, проверка обязательных полей.
+
+## Установка
 
 ```bash
 npm i @phenix1024/editor
 ```
 
-```ts
-import { OphxEditor, mountToolbar } from '@phenix1024/editor'
-import '@phenix1024/editor/style.css'
-
-const editor = new OphxEditor({
-  element: document.querySelector('#editor')!,
-  content: '<h1>Документ</h1><p>Текст…</p>',
-})
-
-mountToolbar(document.querySelector('#toolbar')!, editor.editor)
-```
-
-### Vue 3 + TypeScript
-
-```vue
-<script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
-import { OphxEditor, mountToolbar } from '@phenix1024/editor'
-import '@phenix1024/editor/style.css'
-
-let editor: OphxEditor | null = null
-let unmountToolbar: (() => void) | null = null
-
-onMounted(() => {
-  editor = new OphxEditor({ element: document.querySelector('#editor')! })
-  unmountToolbar = mountToolbar(document.querySelector('#toolbar')!, editor.editor)
-})
-
-onBeforeUnmount(() => {
-  unmountToolbar?.()
-  editor?.destroy()
-})
-</script>
-```
-
-### CDN без сборщика
-
-```html
-<link rel="stylesheet" href="https://unpkg.com/@phenix1024/editor@0.1.0/dist/ophx-editor.css">
-<script src="https://unpkg.com/@phenix1024/editor@0.1.0/dist/ophx-editor.iife.js"></script>
-<script>
-  const editor = new OphxEditor.OphxEditor({ element: document.querySelector('#editor') })
-  OphxEditor.mountToolbar(document.querySelector('#toolbar'), editor.editor)
-</script>
-```
-
-Аналогично для jsDelivr:
-
-```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.1.0/dist/ophx-editor.css">
-<script src="https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.1.0/dist/ophx-editor.iife.js"></script>
-```
-
-> Для CDN лучше жёстко фиксировать версию, чтобы обновления не ломали существующий код.
-
-Переносимый WYSIWYM-редактор на Tiptap. Ядро не зависит от React, Vue, Svelte или другого UI-фреймворка: ему нужен только DOM-контейнер. Панель инструментов опциональна — можно использовать готовую `mountToolbar()` или построить собственный интерфейс поверх публичного Tiptap instance.
-
-## Возможности
-
-- Заголовки H1–H6, абзацы, маркированные и нумерованные списки; стандартные markdown/input rules Tiptap преобразуют `# `, `- ` и `1. ` при вводе.
-- Жирный, курсив, подчёркивание, зачёркивание, ссылки и метки.
-- Списки, отступы для абзацев/заголовков, изображения, таблицы и сворачивание разделов по заголовкам.
-- Содержание с переходом к заголовку, поиск с подсветкой, Undo/Redo.
-- Не допускается повторный пробел при обычном вводе; Enter не создаёт последовательные пустые строки. Проверка орфографии использует браузерную проверку (`spellcheck`) и язык `ru`.
-- Обычные клавиатурные команды редактора и браузера: выделение, копирование/вставка, Home/End, Undo/Redo и др.
-- Импорт/экспорт `.ophx` v2: плоский ZIP с HTML-файлом, stylesheet-файлами и изображениями.
-- Поля шаблонов Ophx: сохранение `contenteditable`, редактирование полей `.ophx-field`, сбор значений и проверка обязательных полей.
-
-Проверка орфографии зависит от браузера и установленных словарей. Для удалённых изображений, недоступных из-за CORS, сохраняется исходная внешняя ссылка; локальные/вставленные изображения упаковываются в корень архива.
-
-## Разработка
-
-```sh
-npm install
-npm run dev
-npm run typecheck
-npm run build
-```
-
-`npm run build` собирает демо в `dist-demo/` и библиотеку/standalone-бандлы в `dist/`.
-
-## Быстрый старт: создание, сохранение и открытие
-
-Разместите контейнеры и элементы управления в своей разметке (кнопки сохранения/открытия принадлежат приложению, не библиотеке):
+## Быстрый старт
 
 ```html
 <div id="toolbar"></div>
 <div id="editor"></div>
-<input id="document-title" value="Мой документ">
-<button id="save" type="button">Сохранить .ophx</button>
-<button id="open" type="button">Открыть .ophx</button>
-<button id="toggle-edit-mode" type="button" aria-pressed="true">Режим: редактирование</button>
-<input id="open-file" type="file" accept=".ophx,.zip,application/zip" hidden>
 ```
 
 ```ts
-import { OphxEditor, mountToolbar } from '@phenix1024/editor'
+import { OphxEditor } from '@phenix1024/editor'
 import '@phenix1024/editor/style.css'
 
-const editorHost = document.querySelector<HTMLElement>('#editor')!
-const toolbarHost = document.querySelector<HTMLElement>('#toolbar')!
-const fileInput = document.querySelector<HTMLInputElement>('#open-file')!
-const title = document.querySelector<HTMLInputElement>('#document-title')!
-
-// Инициализируйте один экземпляр на один DOM-контейнер.
 const editor = new OphxEditor({
-  element: editorHost,
-  content: localStorage.getItem('draft-html') ?? '<h1>Новый документ</h1><p>Начните писать…</p>',
-  onUpdate: ({ editor: tiptap }) => {
-    // Для небольших документов; для больших файлов используйте IndexedDB или сервер.
-    localStorage.setItem('draft-html', tiptap.getHTML())
-  },
+  element: '#editor',   // элемент или CSS-селектор
+  toolbar: '#toolbar',  // необязательно: встроенная панель инструментов
+  content: '<h1>Документ</h1><p>Начните писать…</p>',
+  onUpdate: () => localStorage.setItem('draft', editor.getHTML()),
 })
-const unmountToolbar = mountToolbar(toolbarHost, editor.editor)
-
-const modeButton = document.querySelector<HTMLButtonElement>('#toggle-edit-mode')!
-modeButton.addEventListener('click', () => {
-  const editable = !editor.isEditable
-  editor.setEditable(editable)
-  modeButton.setAttribute('aria-pressed', String(editable))
-  modeButton.textContent = editable ? 'Режим: редактирование' : 'Режим: просмотр'
-})
-
-document.querySelector('#save')!.addEventListener('click', async () => {
-  // downloadOphx создаёт архив .ophx и запускает браузерное скачивание.
-  await editor.downloadOphx({
-    filename: 'Мой-документ', // имя без расширения .ophx
-    title: title.value || 'Мой документ',
-    styles: { 'default.css': 'body{font-family:Arial,sans-serif;line-height:1.6}' },
-  })
-})
-
-document.querySelector('#open')!.addEventListener('click', () => fileInput.click())
-fileInput.addEventListener('change', async () => {
-  const file = fileInput.files?.[0]
-  if (!file) return
-  try {
-    // Загружает архив в редактор и возвращает title, filename, styles и HTML.
-    const document = await editor.loadOphx(file)
-    title.value = document.title
-  } catch (error) {
-    console.error('Не удалось открыть документ', error)
-  } finally {
-    fileInput.value = ''
-  }
-})
-
-// Вызовите эту функцию при размонтировании компонента или удалении редактора.
-function disposeEditor() {
-  unmountToolbar()
-  editor.destroy()
-}
 ```
 
-`loadOphx()` принимает `File` (он является `Blob`) и разбирает архив до замены текущего документа. Если импорт успешен, редактор получает HTML, а имя, заголовок, стили и `bodyContentEditable` запоминаются как значения по умолчанию для следующего `saveOphx()`/`downloadOphx()`. Переданные в метод параметры переопределяют импортированные значения.
+Готово: редактор с панелью работает. Когда редактор больше не нужен, вызовите `editor.destroy()`. Он уберёт и панель.
 
-Режим просмотра включается через `editor.setEditable(false)`, обратно — через `editor.setEditable(true)`. При использовании готового `mountToolbar()` инструменты форматирования, изменения таблиц и изображений автоматически отключаются; поиск и содержание остаются доступны. Кнопки загрузки и скачивания в верхней панели принадлежат вашему приложению и остаются активными.
+## Частые задачи
 
-Если приложение само управляет интерфейсом сохранения, используйте `const blob = await editor.saveOphx(options)`, чтобы получить архив без автоматического скачивания, и сохраните Blob на сервер или в файловое хранилище. Для ручного скачивания также экспортируется `downloadBlob(blob, filename)`.
-
-## Стандартные операции редактора
+### Получить и задать содержимое
 
 ```ts
-const html = editor.getHTML()
-const json = editor.getJSON()
-const plainText = editor.getText()
+const html = editor.getHTML()          // для автосохранения и отправки на сервер
+const json = editor.getJSON()          // структура документа Tiptap
+const text = editor.getText()          // простой текст
 
-editor.setContent('<h1>Новый текст</h1>') // не вызывает onUpdate по умолчанию
-editor.setContent(html, { emitUpdate: true })
+editor.setContent('<p>Новый текст</p>')                    // onUpdate не вызывается
+editor.setContent('<p>Новый текст</p>', { emitUpdate: true })
 editor.clearContent()
-editor.focus('end') // также: 'start', 'all' или позиция
-editor.blur()
-editor.setEditable(false)
-
-if (editor.canUndo()) editor.undo()
-if (editor.canRedo()) editor.redo()
-
-const empty = editor.isEmpty
-const editable = editor.isEditable
 ```
 
-`getHTML()` — подходящий формат для обычного автосохранения/синхронизации, `getJSON()` — структурированное представление Tiptap. `.ophx` нужен, если требуется переносимый архив со стилями и изображениями; это не то же самое, что HTML-черновик.
+### Режим просмотра
 
-## Подключение в React
+```ts
+editor.setEditable(false)  // только чтение
+editor.setEditable(true)   // снова редактирование
+editor.isEditable          // текущий режим
+```
+
+Режим сохраняется в `localStorage` и восстанавливается после перезагрузки. В режиме просмотра панель отключает инструменты форматирования, а поиск и содержание остаются доступными.
+
+| Опция | Поведение |
+| --- | --- |
+| `editable: false` | Начальный режим, если сохранённого значения ещё нет. |
+| `editableStorageKey: 'my-key'` | Свой ключ `localStorage`, например отдельный для каждого документа. |
+| `editableStorageKey: null` | Не запоминать режим: всегда используется `editable`. |
+
+### Сохранить и открыть `.ophx`
+
+```ts
+// Скачать файл в браузере
+await editor.downloadOphx({ filename: 'Договор', title: 'Договор поставки' })
+
+// Или получить Blob, например чтобы отправить на сервер
+const blob = await editor.saveOphx({ filename: 'Договор' })
+
+// Открыть файл, выбранный пользователем
+input.addEventListener('change', async () => {
+  const file = input.files?.[0]
+  if (!file) return
+  const doc = await editor.loadOphx(file)   // { title, filename, styles, css, html, ... }
+  console.log(doc.title)
+})
+```
+
+После `loadOphx()` имя, заголовок и стили архива запоминаются. Следующий `saveOphx()` или `downloadOphx()` без параметров сохранит документ с теми же метаданными. Параметры, переданные явно, имеют приоритет.
+
+### Свои действия поверх Tiptap
+
+`editor.editor` — это исходный экземпляр Tiptap `Editor`. Через него доступны все команды и события:
+
+```ts
+editor.editor.chain().focus().toggleBold().run()
+editor.editor.on('selectionUpdate', () => { /* ... */ })
+```
+
+Дополнительные расширения Tiptap передаются через `extensions: [...]`.
+
+### Загрузка изображений на сервер
+
+По умолчанию панель вставляет изображения как `data:` URL, а при сохранении они упаковываются в `.ophx`. Чтобы загружать их на свой сервер:
+
+```ts
+const editor = new OphxEditor({
+  element: '#editor',
+  toolbar: '#toolbar',
+  toolbarOptions: {
+    onInsertImage: async (file) => {
+      const url = await uploadToServer(file)
+      editor.editor.chain().focus().setImage({ src: url, alt: file.name }).run()
+    },
+  },
+})
+```
+
+### Метки
+
+Выделите текст и нажмите «Метка» на панели. Во всплывающем окне введите название или выберите существующее. Клик по метке показывает её название, а в режиме редактирования там же её можно изменить или удалить. Метки сохраняются как `<mark data-label="...">`. Метки «важно» и «идея» имеют свои цвета, цвета остальных задаются в CSS:
+
+```css
+.ophx-editor-surface mark[data-label="срочно"] { background: #ffe0b3; }
+```
+
+### Поля шаблонов
+
+Поле — это элемент с классом `ophx-field`, атрибутом `contenteditable="true"` и уникальным `data-ophx-field`:
+
+```html
+<p>Покупатель: <span class="ophx-field" contenteditable="true"
+   data-ophx-field="buyer" data-ophx-label="Покупатель" data-ophx-required="true"></span></p>
+```
+
+```ts
+editor.getFields()                 // [{ id, label, required, value }]
+editor.getMissingRequiredFields()  // незаполненные обязательные поля
+
+import { convertUnderscoresToFields } from '@phenix1024/editor'
+const { html } = convertUnderscoresToFields('<p>ФИО: ______</p>')  // «___» превращается в поля f1, f2, …
+```
+
+Фрагменты с `contenteditable="false"` сохраняются и остаются нередактируемыми.
+
+## Фреймворки
+
+### React
 
 ```tsx
 import { useEffect, useRef } from 'react'
-import { OphxEditor, mountToolbar } from '@phenix1024/editor'
+import { OphxEditor } from '@phenix1024/editor'
 import '@phenix1024/editor/style.css'
 
-export function DocumentEditor() {
-  const editorHost = useRef<HTMLDivElement>(null)
-  const toolbarHost = useRef<HTMLDivElement>(null)
+export function DocumentEditor({ initialHtml }: { initialHtml?: string }) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!editorHost.current || !toolbarHost.current) return
-    const editor = new OphxEditor({ element: editorHost.current })
-    const unmountToolbar = mountToolbar(toolbarHost.current, editor.editor)
-    return () => { unmountToolbar(); editor.destroy() }
+    const editor = new OphxEditor({
+      element: editorRef.current!,
+      toolbar: toolbarRef.current!,
+      content: initialHtml,
+    })
+    return () => editor.destroy()
   }, [])
 
-  return <><div ref={toolbarHost} /><div ref={editorHost} /></>
+  return (
+    <>
+      <div ref={toolbarRef} />
+      <div ref={editorRef} />
+    </>
+  )
 }
 ```
 
-Для Vue/Svelte/Angular используется тот же DOM API в `onMounted`/`onMount`/lifecycle хуке. Не подключайте одновременно встроенный и собственный toolbar.
+### Vue 3
+
+```vue
+<script setup lang="ts">
+import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { OphxEditor } from '@phenix1024/editor'
+import '@phenix1024/editor/style.css'
+
+const editorEl = ref<HTMLElement>()
+const toolbarEl = ref<HTMLElement>()
+let editor: OphxEditor | undefined
+
+onMounted(() => {
+  editor = new OphxEditor({ element: editorEl.value!, toolbar: toolbarEl.value! })
+})
+onBeforeUnmount(() => editor?.destroy())
+</script>
+
+<template>
+  <div ref="toolbarEl" />
+  <div ref="editorEl" />
+</template>
+```
+
+Не храните экземпляр `OphxEditor` в `ref()` или `reactive()`: прокси Vue мешают работе Tiptap.
+
+### Без сборщика (CDN)
+
+```html
+<link rel="stylesheet" href="https://unpkg.com/@phenix1024/editor@0.2.0/dist/ophx-editor.css">
+<script src="https://unpkg.com/@phenix1024/editor@0.2.0/dist/ophx-editor.iife.js"></script>
+
+<div id="toolbar"></div>
+<div id="editor"></div>
+<script>
+  const editor = new OphxEditor.OphxEditor({ element: '#editor', toolbar: '#toolbar' })
+</script>
+```
+
+Через jsDelivr: `https://cdn.jsdelivr.net/npm/@phenix1024/editor@0.2.0/dist/...`. Версию в ссылке лучше фиксировать.
+
+## API
+
+### `new OphxEditor(options)`
+
+| Опция | Тип | По умолчанию | Описание |
+| --- | --- | --- | --- |
+| `element` | `HTMLElement \| string` | — | Контейнер документа (обязательно). |
+| `toolbar` | `HTMLElement \| string` | — | Контейнер встроенной панели инструментов. |
+| `toolbarOptions` | `{ onInsertImage?(file) }` | — | Настройки панели. |
+| `content` | `string \| JSON` | `'<p></p>'` | Начальное содержимое. |
+| `placeholder` | `string` | `'Начните писать…'` | Подсказка в пустом документе. |
+| `editable` | `boolean` | `true` | Начальный режим, если нет сохранённого. |
+| `editableStorageKey` | `string \| null` | `'ophx-editor-editable'` | Ключ `localStorage` для режима; `null` отключает хранение. |
+| `onUpdate` | `({ editor }) => void` | — | Вызывается при каждом изменении документа. |
+| `extensions` | `Extension[]` | `[]` | Дополнительные расширения Tiptap. |
+
+### Методы и свойства
+
+| | |
+| --- | --- |
+| `getHTML()`, `getJSON()`, `getText()` | Содержимое документа. |
+| `setContent(content, { emitUpdate? })`, `clearContent()` | Замена содержимого. |
+| `setEditable(bool)`, `isEditable` | Режим редактирования или просмотра. |
+| `isEmpty` | Пустой ли документ. |
+| `focus(pos?)`, `blur()` | Фокус: `'start'`, `'end'`, `'all'` или позиция. |
+| `undo()`, `redo()`, `canUndo()`, `canRedo()` | История изменений. |
+| `setSearchQuery(query)` | Подсветка найденного текста. |
+| `loadOphx(file)` | Открыть `.ophx`, возвращает `OphxDocument`. |
+| `saveOphx(options?)` | Создать `.ophx` и вернуть `Blob`. |
+| `downloadOphx(options?)` | Скачать `.ophx`. |
+| `getFields()`, `getMissingRequiredFields()` | Поля шаблона. |
+| `destroy()` | Удалить редактор и панель. |
+| `editor` | Исходный Tiptap `Editor`. |
+
+Параметры сохранения (`OphxExportOptions`): `filename` (имя без `.ophx`), `title`, `styles` (`{ 'имя.css': 'css…' }`), `assets` (файлы изображений по имени), `bodyContentEditable`.
+
+### Другие экспорты
+
+- `mountToolbar(host, tiptapEditor, options?)` — смонтировать панель вручную. Возвращает функцию очистки.
+- `exportOphx(html, options)`, `importOphx(file)`, `downloadBlob(blob, filename)` — работа с архивами без редактора.
+- `convertUnderscoresToFields(html, prefix?)` — превращает `___` в поля шаблона.
+- Расширения Tiptap: `Label`, `CollapsibleHeading`, `Indentation`, `OphxInlineField`, `OphxBlockField`, `OphxReadonlyBlock`, `OphxReadonlyInline`, `OphxEditability`, `TextSearch`, `WysiwymRules`.
 
 ## Формат `.ophx`
 
-`.ophx` соответствует v2 спецификации: это обычный ZIP без шифрования и ZIP64; записи создаются с DEFLATE, имена кодируются в UTF-8. Все файлы лежат плоским списком в корне. Внутри должен быть ровно один HTML-файл, его имя совпадает с именем внешнего `.ophx` без расширения. Стили и изображения тоже лежат в корне, без каталогов:
+Обычный ZIP, все файлы лежат в корне. Внутри ровно один HTML, его имя совпадает с именем архива. Рядом лежат CSS и изображения:
 
 ```text
 Договор.ophx
@@ -226,45 +266,19 @@ export function DocumentEditor() {
 └── image-1.png
 ```
 
-```ts
-import { downloadBlob } from '@phenix1024/editor'
+- Вставленные изображения (`data:`, `blob:`) упаковываются как `image-<n>.<ext>`. Внешние `http(s)` ссылки остаются ссылками.
+- При открытии из HTML удаляются `<script>` и обработчики событий (`on*`).
+- CSS из архива возвращается в `doc.styles` и к странице автоматически не применяется. Где его применять, решает приложение.
 
-const archive = await editor.saveOphx({
-  filename: 'Договор', // basename должен совпадать с именем скачиваемого .ophx
-  title: 'Договор поставки',
-  styles: { 'default.css': cssText },
-  bodyContentEditable: 'false', // если архив был импортирован с таким атрибутом
-})
-downloadBlob(archive, 'Договор.ophx')
+## Разработка
 
-const document = await editor.loadOphx(file)
-// После импорта метаданные архива используются автоматически.
-const updatedArchive = await editor.saveOphx()
-downloadBlob(updatedArchive, `${document.filename}.ophx`)
-// document.styles содержит все подключённые локальные CSS-файлы.
-// document.css — удобный алиас первого stylesheet.
+```sh
+npm install
+npm run dev        # демо на http://localhost:5173
+npm run typecheck
+npm run build      # демо в dist-demo/, библиотека в dist/
 ```
 
-Имена в `styles` и `assets` — простые имена файлов, без путей. Изображения с локальными именами можно передать в `assets`; вставленные в редактор `data:image` и `blob:` изображения автоматически превращаются в `image-<номер>.<ext>`. Внешние `http(s)` и `data:` ссылки сохраняются как внешние.
+## Лицензия
 
-Импорт принимает только ZIP v2 с одним корневым `.html`; старые не-ZIP/XML варианты определяются как неподдерживаемые. Локальные ссылки на CSS и изображения проверяются по точным именам. Скриптовые элементы и event-handler атрибуты удаляются перед передачей HTML редактору. Содержимое `styles` возвращается вызывающему приложению — оно может применить CSS в изолированном контейнере или iframe.
-
-### Поля шаблона
-
-В документе сохраняются поля `span` (inline) и `p`/`div` (block) с `.ophx-field`, `contenteditable="true"` и уникальным `data-ophx-field`. Статические фрагменты с `contenteditable="false"` сохраняются; при `body contenteditable="false"` это состояние также переносится в editor-модель. Значения доступны через `editor.getFields()`, обязательные незаполненные поля — через `editor.getMissingRequiredFields()`.
-
-Для подготовки шаблона helper `convertUnderscoresToFields(html)` заменяет каждую последовательность `_{2,}` в текстовых узлах отдельным пустым полем с ключами `f1`, `f2`, …; кодовые блоки и нередактируемые участки пропускаются.
-
-## API
-
-- `new OphxEditor({ element, content?, placeholder?, editable?, onUpdate?, extensions? })`
-- `editor.editor` — исходный Tiptap `Editor` для команд и подписок.
-- `getHTML()`, `getJSON()`, `getText()`, `setContent(content, options?)`, `clearContent(options?)`, `setSearchQuery(query)`.
-- `focus(position?)`, `blur()`, `setEditable(value)`, `isEditable`, `isEmpty`, `undo()`, `redo()`, `canUndo()`, `canRedo()`.
-- `loadOphx(file)` загружает архив и возвращает `OphxDocument`; `saveOphx(options?)` возвращает Promise с Blob архива; `downloadOphx(options?)` скачивает его в браузере.
-- `mountToolbar(host, editor, { onInsertImage? })` возвращает функцию очистки.
-- `exportOphx(html, { filename, title?, styles?, assets?, bodyContentEditable? })`, `importOphx(file)`, `downloadBlob(blob, filename)`.
-- `getFields()` и `getMissingRequiredFields()` возвращают валидные уникальные поля шаблона.
-- `convertUnderscoresToFields(html, prefix?)` возвращает преобразованный HTML, число полей и их IDs.
-
-Интеграционный пакет поставляет Tiptap extensions и JSZip как runtime-зависимости. Подключайте stylesheet явно в приложении, где сборщик не обрабатывает CSS imports автоматически.
+MIT
