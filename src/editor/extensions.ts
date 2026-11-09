@@ -1,7 +1,9 @@
-import { Extension, Mark, Node } from '@tiptap/core'
+import { Extension, Mark, Node, type Editor } from '@tiptap/core'
 import Heading from '@tiptap/extension-heading'
 import Image from '@tiptap/extension-image'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import type { Step } from '@tiptap/pm/transform'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 
 export const Label = Mark.create({
@@ -139,7 +141,7 @@ export const OphxImage = Image.extend({
       }
 
       const updateWidth = (width: number) => {
-        if (!editor.isEditable) return
+        if (!canEditStructure(editor)) return
         const position = typeof getPos === 'function' ? getPos() : undefined
         if (typeof position !== 'number') return
         const existing = editor.state.doc.nodeAt(position)
@@ -162,7 +164,7 @@ export const OphxImage = Image.extend({
         if (resizeHandle.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId)
       }
       resizeHandle.addEventListener('pointerdown', (event) => {
-        if (!editor.isEditable) return
+        if (!canEditStructure(editor)) return
         event.preventDefault()
         event.stopPropagation()
         dragStartX = event.clientX
@@ -174,7 +176,7 @@ export const OphxImage = Image.extend({
       resizeHandle.addEventListener('pointerup', stopDragging)
       resizeHandle.addEventListener('pointercancel', stopDragging)
       resizeHandle.addEventListener('keydown', (event) => {
-        if (!editor.isEditable) return
+        if (!canEditStructure(editor)) return
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
         event.preventDefault()
         const currentWidth = Number(currentNode.attrs.width) || Math.round(image.getBoundingClientRect().width)
@@ -360,7 +362,7 @@ export const CollapsibleHeading = Heading.extend({
         editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, {
           ...liveNode.attrs,
           collapsed: !liveNode.attrs.collapsed,
-        }))
+        }).setMeta(TEMPLATE_FILL_ALLOW_META, true))
       }
 
       toggle.addEventListener('mousedown', (event) => event.preventDefault())
@@ -556,3 +558,113 @@ export const OphxEditability = Extension.create({
 export function isValidOphxFieldId(value: string): boolean {
   return FIELD_ID_PATTERN.test(value)
 }
+
+const FIELD_NODE_TYPES = new Set(['ophxInlineField', 'ophxBlockField'])
+/** Transactions carrying this meta are allowed in template fill mode (UI-only changes such as collapsing). */
+export const TEMPLATE_FILL_ALLOW_META = 'ophxTemplateFillAllow'
+export const templateFillKey = new PluginKey('ophxTemplateFill')
+
+export interface TemplateFillStorage {
+  /** When true only the text inside template fields (.ophx-field) can change. */
+  enabled: boolean
+  /** Temporarily lets programmatic changes (setContent, loadOphx) through. */
+  bypass: boolean
+}
+
+declare module '@tiptap/core' {
+  interface Storage {
+    ophxTemplateFill: TemplateFillStorage
+  }
+}
+
+/** True while the editor is in template fill mode. */
+export function isTemplateFillActive(editor: Editor): boolean {
+  return Boolean(editor.storage.ophxTemplateFill?.enabled)
+}
+
+/** True when formatting and structure (not only field values) may be edited. */
+export function canEditStructure(editor: Editor): boolean {
+  return editor.isEditable && !isTemplateFillActive(editor)
+}
+
+function fieldRangeAt(doc: ProseMirrorNode, position: number): { from: number; to: number } | null {
+  const $pos = doc.resolve(position)
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if (FIELD_NODE_TYPES.has($pos.node(depth).type.name)) return { from: $pos.start(depth), to: $pos.end(depth) }
+  }
+  return null
+}
+
+function stepStaysInsideField(doc: ProseMirrorNode, step: Step): boolean {
+  const { from, to } = step as unknown as { from?: unknown; to?: unknown }
+  if (typeof from !== 'number' || typeof to !== 'number') return false
+  const field = fieldRangeAt(doc, from)
+  return Boolean(field && from >= field.from && to <= field.to)
+}
+
+function fieldPositions(doc: ProseMirrorNode): Array<{ from: number; to: number }> {
+  const fields: Array<{ from: number; to: number }> = []
+  doc.descendants((node, position) => {
+    if (FIELD_NODE_TYPES.has(node.type.name)) {
+      fields.push({ from: position + 1, to: position + node.nodeSize - 1 })
+      return false
+    }
+    return true
+  })
+  return fields
+}
+
+function moveToField(editor: Editor, direction: 1 | -1): boolean {
+  const fields = fieldPositions(editor.state.doc)
+  if (!fields.length) return true
+  const { from } = editor.state.selection
+  const currentIndex = fields.findIndex((field) => from >= field.from && from <= field.to)
+  let target: { from: number; to: number } | undefined
+  if (direction === 1) {
+    target = currentIndex >= 0 ? fields[currentIndex + 1] : fields.find((field) => field.from > from)
+    target ??= fields[0]
+  } else {
+    target = currentIndex >= 0 ? fields[currentIndex - 1] : [...fields].reverse().find((field) => field.to < from)
+    target ??= fields[fields.length - 1]
+  }
+  const { tr } = editor.state
+  editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, target.from, target.to)).scrollIntoView())
+  editor.view.focus()
+  return true
+}
+
+/**
+ * Template fill mode: the document stays focusable and searchable, but every change outside
+ * template fields is rejected. Tab / Shift+Tab move between fields.
+ */
+export const TemplateFill = Extension.create<Record<string, never>, TemplateFillStorage>({
+  name: 'ophxTemplateFill',
+  priority: 1100,
+  addStorage() {
+    return { enabled: false, bypass: false }
+  },
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => this.storage.enabled && moveToField(this.editor, 1),
+      'Shift-Tab': () => this.storage.enabled && moveToField(this.editor, -1),
+      Enter: () => this.storage.enabled,
+      'Shift-Enter': () => this.storage.enabled,
+    }
+  },
+  addProseMirrorPlugins() {
+    const storage = this.storage
+    return [
+      new Plugin({
+        key: templateFillKey,
+        filterTransaction(transaction) {
+          if (!storage.enabled || storage.bypass || !transaction.docChanged) return true
+          if (transaction.getMeta(TEMPLATE_FILL_ALLOW_META)) return true
+          return transaction.steps.every((step, index) => stepStaysInsideField(transaction.docs[index], step))
+        },
+        props: {
+          attributes: (): Record<string, string> => (storage.enabled ? { 'data-ophx-mode': 'fill' } : {}),
+        },
+      }),
+    ]
+  },
+})

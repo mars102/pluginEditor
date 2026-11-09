@@ -5,7 +5,7 @@
 - Заголовки, списки, отступы, таблицы, изображения с обтеканием, ссылки и цветные метки.
 - Markdown-подобный ввод: `# ` даёт заголовок, `- ` маркированный список, `1. ` нумерованный.
 - Готовая панель инструментов: стиль текста, поиск с подсветкой, содержание, отмена и повтор.
-- Режим просмотра, который запоминается между перезагрузками страницы.
+- Три режима: редактирование, заполнение шаблона (меняются только поля) и просмотр. Выбранный режим запоминается между перезагрузками.
 - Поля шаблонов: заполняемые места в документе, сбор значений, проверка обязательных полей.
 
 ## Установка
@@ -49,21 +49,30 @@ editor.setContent('<p>Новый текст</p>', { emitUpdate: true })
 editor.clearContent()
 ```
 
-### Режим просмотра
+### Режимы: редактирование, заполнение, просмотр
 
 ```ts
-editor.setEditable(false)  // только чтение
-editor.setEditable(true)   // снова редактирование
-editor.isEditable          // текущий режим
+editor.setMode('edit')  // всё редактируется
+editor.setMode('fill')  // меняются только поля шаблона, остальной текст заблокирован
+editor.setMode('view')  // только чтение
+editor.mode             // 'edit' | 'fill' | 'view'
 ```
 
-Режим сохраняется в `localStorage` и восстанавливается после перезагрузки. В режиме просмотра панель отключает инструменты форматирования, а поиск и содержание остаются доступными.
+| Режим | Текст документа | Поля шаблона | Панель инструментов |
+| --- | --- | --- | --- |
+| `edit` | редактируется | редактируются | всё доступно |
+| `fill` | заблокирован | редактируются, Tab и Shift+Tab переходят между полями | доступны поиск, содержание, отмена и повтор |
+| `view` | заблокирован | заблокированы | доступны поиск и содержание |
+
+`setEditable(true)` и `setEditable(false)` по-прежнему работают как `setMode('edit')` и `setMode('view')`.
+
+Режим сохраняется в `localStorage` и восстанавливается после перезагрузки.
 
 | Опция | Поведение |
 | --- | --- |
-| `editable: false` | Начальный режим, если сохранённого значения ещё нет. |
+| `mode: 'fill'` | Начальный режим, если сохранённого значения ещё нет. |
 | `editableStorageKey: 'my-key'` | Свой ключ `localStorage`, например отдельный для каждого документа. |
-| `editableStorageKey: null` | Не запоминать режим: всегда используется `editable`. |
+| `editableStorageKey: null` | Не запоминать режим: всегда используется `mode`. |
 
 ### Сохранить и открыть `.ophx`
 
@@ -139,6 +148,34 @@ const { html } = convertUnderscoresToFields('<p>ФИО: ______</p>')  // «___»
 ```
 
 Фрагменты с `contenteditable="false"` сохраняются и остаются нередактируемыми.
+
+#### Заполнение шаблона
+
+Типичный сценарий: автор готовит шаблон в режиме `edit`, а пользователь заполняет его в режиме `fill`.
+
+```ts
+const editor = new OphxEditor({
+  element: '#editor',
+  toolbar: '#toolbar',
+  mode: 'fill',
+  editableStorageKey: null,   // для форм режим обычно задаёт приложение, а не прошлый визит
+  content: templateHtml,
+})
+
+submitButton.addEventListener('click', () => {
+  const missing = editor.getMissingRequiredFields()
+  if (missing.length) return alert(`Заполните: ${missing.map((f) => f.label ?? f.id).join(', ')}`)
+  send(editor.getFields())    // [{ id: 'buyer', value: 'Иванов', ... }]
+})
+```
+
+В режиме заполнения:
+- ввод, вставка, удаление и форматирование работают только внутри полей. Любое изменение за их пределами отклоняется, в том числе «выделить всё» с удалением и Backspace в начале поля;
+- Tab и Shift+Tab переходят к следующему и предыдущему полю и выделяют его содержимое, а Enter не разбивает поле;
+- поля подсвечены, незаполненные обязательные (`data-ophx-required="true"`) выделены красным;
+- `setContent()` и `loadOphx()` по-прежнему заменяют документ целиком.
+
+Если открыть архив `.ophx` с `<body contenteditable="false">` в режиме `edit`, `loadOphx()` сам переключит редактор в `fill`.
 
 ## Фреймворки
 
@@ -223,7 +260,8 @@ onBeforeUnmount(() => editor?.destroy())
 | `toolbarOptions` | `{ onInsertImage?(file) }` | — | Настройки панели. |
 | `content` | `string \| JSON` | `'<p></p>'` | Начальное содержимое. |
 | `placeholder` | `string` | `'Начните писать…'` | Подсказка в пустом документе. |
-| `editable` | `boolean` | `true` | Начальный режим, если нет сохранённого. |
+| `mode` | `'edit' \| 'fill' \| 'view'` | `'edit'` | Начальный режим, если нет сохранённого. |
+| `editable` | `boolean` | `true` | Устаревший вариант: `false` равно `mode: 'view'`. |
 | `editableStorageKey` | `string \| null` | `'ophx-editor-editable'` | Ключ `localStorage` для режима; `null` отключает хранение. |
 | `onUpdate` | `({ editor }) => void` | — | Вызывается при каждом изменении документа. |
 | `extensions` | `Extension[]` | `[]` | Дополнительные расширения Tiptap. |
@@ -234,7 +272,8 @@ onBeforeUnmount(() => editor?.destroy())
 | --- | --- |
 | `getHTML()`, `getJSON()`, `getText()` | Содержимое документа. |
 | `setContent(content, { emitUpdate? })`, `clearContent()` | Замена содержимого. |
-| `setEditable(bool)`, `isEditable` | Режим редактирования или просмотра. |
+| `setMode(mode)`, `mode` | Режим: `'edit'`, `'fill'` или `'view'`. |
+| `setEditable(bool)`, `isEditable` | Короткий вариант для `edit`/`view`. `isEditable` равно `true` в `edit` и `fill`. |
 | `isEmpty` | Пустой ли документ. |
 | `focus(pos?)`, `blur()` | Фокус: `'start'`, `'end'`, `'all'` или позиция. |
 | `undo()`, `redo()`, `canUndo()`, `canRedo()` | История изменений. |
@@ -253,7 +292,8 @@ onBeforeUnmount(() => editor?.destroy())
 - `mountToolbar(host, tiptapEditor, options?)` — смонтировать панель вручную. Возвращает функцию очистки.
 - `exportOphx(html, options)`, `importOphx(file)`, `downloadBlob(blob, filename)` — работа с архивами без редактора.
 - `convertUnderscoresToFields(html, prefix?)` — превращает `___` в поля шаблона.
-- Расширения Tiptap: `Label`, `CollapsibleHeading`, `Indentation`, `OphxInlineField`, `OphxBlockField`, `OphxReadonlyBlock`, `OphxReadonlyInline`, `OphxEditability`, `TextSearch`, `WysiwymRules`.
+- `isTemplateFillActive(tiptapEditor)`, `canEditStructure(tiptapEditor)` — для своей панели инструментов: включён ли режим заполнения и можно ли менять форматирование.
+- Расширения Tiptap: `Label`, `CollapsibleHeading`, `Indentation`, `OphxInlineField`, `OphxBlockField`, `OphxReadonlyBlock`, `OphxReadonlyInline`, `OphxEditability`, `TemplateFill`, `TextSearch`, `WysiwymRules`.
 
 ## Формат `.ophx`
 

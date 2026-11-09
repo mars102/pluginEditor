@@ -1,5 +1,5 @@
 import './demo.css'
-import { mountToolbar, OphxEditor } from './index'
+import { mountToolbar, OphxEditor, type OphxEditorMode } from './index'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const DEFAULT_DOCUMENT_CSS = `body{font-family:Arial,sans-serif;line-height:1.7;color:#24262d;max-width:900px;margin:48px auto;padding:0 24px}h1,h2,h3{line-height:1.25;color:#191b23}img{max-width:100%;height:auto}img[data-ophx-wrap="left"]{float:left;margin:4px 16px 12px 0}img[data-ophx-wrap="right"]{float:right;margin:4px 0 12px 16px}img[data-ophx-wrap="none"][data-ophx-align="center"]{display:block;margin-left:auto;margin-right:auto}img[data-ophx-wrap="none"][data-ophx-align="right"]{display:block;margin-left:auto;margin-right:0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dfe1e8;padding:8px}mark{background:#fff1a8}`
@@ -63,18 +63,27 @@ mountToolbar(toolbar, editor.editor, {
 })
 
 const editModeButton = document.querySelector<HTMLButtonElement>('#toggle-edit-mode')!
-const syncEditModeButton = (editable: boolean) => {
-  editModeButton.setAttribute('aria-pressed', String(editable))
-  editModeButton.textContent = editable ? 'Режим: редактирование' : 'Режим: просмотр'
+const MODE_ORDER: OphxEditorMode[] = ['edit', 'fill', 'view']
+const MODE_LABELS: Record<OphxEditorMode, string> = {
+  edit: 'Режим: редактирование',
+  fill: 'Режим: заполнение',
+  view: 'Режим: просмотр',
 }
-syncEditModeButton(editor.isEditable)
+const MODE_STATUS: Record<OphxEditorMode, string> = {
+  edit: 'Режим редактирования включён',
+  fill: 'Режим заполнения: меняются только поля, Tab — следующее поле',
+  view: 'Режим просмотра включён',
+}
+const syncEditModeButton = () => {
+  editModeButton.setAttribute('aria-pressed', String(editor.mode !== 'view'))
+  editModeButton.textContent = MODE_LABELS[editor.mode]
+}
+syncEditModeButton()
 editModeButton.addEventListener('click', () => {
-  const editable = !editor.isEditable
-  editor.setEditable(editable)
-  syncEditModeButton(editable)
-  document.querySelector('#status-message')!.textContent = editable
-    ? 'Режим редактирования включён'
-    : 'Режим просмотра включён'
+  const next = MODE_ORDER[(MODE_ORDER.indexOf(editor.mode) + 1) % MODE_ORDER.length]
+  editor.setMode(next)
+  syncEditModeButton()
+  document.querySelector('#status-message')!.textContent = MODE_STATUS[next]
 })
 
 const title = document.querySelector<HTMLElement>('#document-title')!
@@ -85,6 +94,7 @@ fileInput.addEventListener('change', async () => {
   if (!file) return
   try {
     const ophxDocument = await editor.loadOphx(file)
+    syncEditModeButton()
     localStorage.setItem('ophx-editor-content', editor.getHTML())
     updateCounts()
     documentStyles = ophxDocument.styles

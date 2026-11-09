@@ -19,8 +19,10 @@ import {
   OphxInlineField,
   OphxReadonlyBlock,
   OphxReadonlyInline,
+  TemplateFill,
   TextSearch,
   WysiwymRules,
+  templateFillKey,
   isValidOphxFieldId,
 } from './extensions'
 
@@ -43,16 +45,24 @@ export interface OphxEditorOptions {
   toolbarOptions?: ToolbarOptions
   content?: Content
   placeholder?: string
-  /** Initial mode when nothing is stored yet. Defaults to true. */
+  /**
+   * Initial mode when nothing is stored yet: 'edit' (default), 'fill' (only template fields
+   * are editable) or 'view' (read-only).
+   */
+  mode?: OphxEditorMode
+  /** Legacy shortcut: false is the same as mode: 'view'. Ignored when `mode` is set. */
   editable?: boolean
   /**
-   * localStorage key used to remember the edit/view mode across reloads.
+   * localStorage key used to remember the mode across reloads.
    * Defaults to 'ophx-editor-editable'. Pass null to disable persistence.
    */
   editableStorageKey?: string | null
   onUpdate?: EditorOptions['onUpdate']
   extensions?: NonNullable<EditorOptions['extensions']>
 }
+
+/** edit: full editing; fill: only template fields (.ophx-field) can change; view: read-only. */
+export type OphxEditorMode = 'edit' | 'fill' | 'view'
 
 export interface OphxSetContentOptions {
   /** Emit Tiptap's update event after replacing the document. Defaults to false. */
@@ -79,10 +89,13 @@ export class OphxEditor {
     this.editableStorageKey = options.editableStorageKey === undefined
       ? DEFAULT_EDITABLE_STORAGE_KEY
       : options.editableStorageKey
+    const initialMode: OphxEditorMode = this.readStoredMode()
+      ?? options.mode
+      ?? (options.editable === false ? 'view' : 'edit')
     this.editor = new Editor({
       element: resolveElement(options.element, 'element'),
       content: options.content ?? '<p></p>',
-      editable: this.readStoredEditable() ?? options.editable ?? true,
+      editable: initialMode !== 'view',
       extensions: [
         StarterKit.configure({ heading: false, underline: false, link: false }),
         CollapsibleHeading.configure({ levels: [1, 2, 3, 4, 5, 6] }),
@@ -101,6 +114,7 @@ export class OphxEditor {
         Indentation,
         OphxEditability,
         TextSearch,
+        TemplateFill,
         WysiwymRules,
         Placeholder.configure({ placeholder: options.placeholder ?? 'Начните писать…' }),
         ...(options.extensions ?? []),
@@ -133,9 +147,10 @@ export class OphxEditor {
           },
         },
       },
-      onUpdate: options.onUpdate,
+      // Passing `onUpdate: undefined` would replace Tiptap's default handler and crash on the first edit.
+      ...(options.onUpdate ? { onUpdate: options.onUpdate } : {}),
     })
-    this.syncEditableControls()
+    this.applyMode(initialMode)
     if (options.toolbar) {
       this.unmountToolbar = mountToolbar(resolveElement(options.toolbar, 'toolbar'), this.editor, options.toolbarOptions)
     }
@@ -157,13 +172,20 @@ export class OphxEditor {
     return this.editor.isEmpty
   }
 
+  /** True in 'edit' and 'fill' modes (the document accepts input), false in 'view'. */
   get isEditable(): boolean {
     return this.editor.isEditable
   }
 
+  /** Current mode: 'edit', 'fill' or 'view'. */
+  get mode(): OphxEditorMode {
+    if (!this.editor.isEditable) return 'view'
+    return this.editor.storage.ophxTemplateFill.enabled ? 'fill' : 'edit'
+  }
+
   setContent(content: Content, options: OphxSetContentOptions = {}): void {
     this.archiveDefaults = null
-    this.editor.commands.setContent(content, { emitUpdate: options.emitUpdate ?? false })
+    this.replaceDocument(content, options.emitUpdate ?? false)
   }
 
   clearContent(options: OphxSetContentOptions = {}): void {
@@ -180,27 +202,53 @@ export class OphxEditor {
     return this
   }
 
+  /** Shortcut for setMode(editable ? 'edit' : 'view'). */
   setEditable(editable: boolean): this {
-    this.editor.setEditable(editable, false)
-    this.writeStoredEditable(editable)
-    this.syncEditableControls()
+    return this.setMode(editable ? 'edit' : 'view')
+  }
+
+  /** Switch between full editing, template filling and read-only view. The mode is remembered. */
+  setMode(mode: OphxEditorMode): this {
+    this.applyMode(mode)
+    this.writeStoredMode(mode)
     return this
   }
 
-  private readStoredEditable(): boolean | null {
+  private applyMode(mode: OphxEditorMode): void {
+    this.editor.storage.ophxTemplateFill.enabled = mode === 'fill'
+    this.editor.setEditable(mode !== 'view', false)
+    // Re-render editor attributes (data-ophx-mode) and notify listeners such as the toolbar.
+    this.editor.view.dispatch(this.editor.state.tr.setMeta(templateFillKey, mode))
+    this.syncEditableControls()
+  }
+
+  /** Replace the whole document, even in fill mode where user edits outside fields are blocked. */
+  private replaceDocument(content: Content, emitUpdate: boolean): void {
+    const storage = this.editor.storage.ophxTemplateFill
+    storage.bypass = true
+    try {
+      this.editor.commands.setContent(content, { emitUpdate })
+    } finally {
+      storage.bypass = false
+    }
+  }
+
+  private readStoredMode(): OphxEditorMode | null {
     if (!this.editableStorageKey) return null
     try {
       const value = localStorage.getItem(this.editableStorageKey)
-      return value === 'true' ? true : value === 'false' ? false : null
+      if (value === 'edit' || value === 'fill' || value === 'view') return value
+      // Values written by versions before 0.3.0.
+      return value === 'true' ? 'edit' : value === 'false' ? 'view' : null
     } catch {
       return null
     }
   }
 
-  private writeStoredEditable(editable: boolean): void {
+  private writeStoredMode(mode: OphxEditorMode): void {
     if (!this.editableStorageKey) return
     try {
-      localStorage.setItem(this.editableStorageKey, String(editable))
+      localStorage.setItem(this.editableStorageKey, mode)
     } catch {
       // Storage may be unavailable (private mode, blocked site data).
     }
@@ -224,16 +272,24 @@ export class OphxEditor {
 
   private syncEditableControls(): void {
     const editable = this.editor.isEditable
+    const structureEditable = editable && !this.editor.storage.ophxTemplateFill.enabled
     this.editor.view.dom
-      .querySelectorAll<HTMLButtonElement>('.ophx-heading__toggle, .ophx-image-node__resize-handle')
+      .querySelectorAll<HTMLButtonElement>('.ophx-heading__toggle')
       .forEach((button) => { button.disabled = !editable })
+    this.editor.view.dom
+      .querySelectorAll<HTMLButtonElement>('.ophx-image-node__resize-handle')
+      .forEach((button) => { button.disabled = !structureEditable })
     this.editor.view.dom.dispatchEvent(new Event('ophx:editablechange'))
   }
 
-  /** Parse and load an .ophx archive; the archive's metadata becomes the default for saveOphx(). */
+  /**
+   * Parse and load an .ophx archive; the archive's metadata becomes the default for saveOphx().
+   * A template archive (<body contenteditable="false">) switches the editor to 'fill' mode.
+   */
   async loadOphx(file: Blob): Promise<OphxDocument> {
     const document = await importOphx(file)
-    this.editor.commands.setContent(document.html, { emitUpdate: false })
+    this.replaceDocument(document.html, false)
+    if (document.bodyContentEditable === 'false' && this.mode === 'edit') this.setMode('fill')
     this.archiveDefaults = {
       filename: document.filename,
       title: document.title,

@@ -1,5 +1,6 @@
 import { getMarkRange, type Editor } from '@tiptap/core'
 import type { Transaction } from '@tiptap/pm/state'
+import { canEditStructure } from './extensions'
 
 export interface ToolbarOptions {
   onInsertImage?: (file: File) => void
@@ -43,6 +44,10 @@ const BUTTONS: Array<{ action: string; label: string; title: string }> = [
 export function mountToolbar(host: HTMLElement, editor: Editor, options: ToolbarOptions = {}): () => void {
   host.classList.add('ophx-toolbar')
   host.replaceChildren()
+  // Tools wrap onto full-width rows; the search box always ends the first row (see layoutSearch).
+  const tools = document.createElement('div')
+  tools.className = 'ophx-toolbar__tools'
+  host.append(tools)
 
   const setPopupVisible = (node: HTMLElement, visible: boolean) => {
     node.style.display = visible ? '' : 'none'
@@ -141,9 +146,14 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   })
 
   formatWrap.append(formatButton, formatMenu)
-  host.append(formatWrap)
+  tools.append(formatWrap)
 
   const buttons = new Map<string, HTMLButtonElement>()
+  // Undo and redo share one wrapper so they always wrap onto a new row together.
+  const historyGroup = document.createElement('div')
+  historyGroup.className = 'ophx-toolbar__group'
+  historyGroup.setAttribute('role', 'group')
+  historyGroup.setAttribute('aria-label', 'История изменений')
   for (const item of BUTTONS) {
     const button = document.createElement('button')
     button.type = 'button'
@@ -171,11 +181,17 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
         openLabelEditor()
         return
       }
-      if (!editor.isEditable) return
+      const isHistory = item.action === 'undo' || item.action === 'redo'
+      if (isHistory ? !editor.isEditable : !canEditStructure(editor)) return
       runAction(item.action, editor, imageInput, toc)
     })
     buttons.set(item.action, button)
-    host.append(button)
+    if (item.action === 'undo' || item.action === 'redo') {
+      if (historyGroup.parentNode !== tools) tools.append(historyGroup)
+      historyGroup.append(button)
+    } else {
+      tools.append(button)
+    }
   }
 
   const search = document.createElement('input')
@@ -191,7 +207,30 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
       editor.commands.focus()
     }
   })
-  host.append(search)
+  tools.prepend(search)
+
+  // Put the search box right after the last tool that still fits on the first row, so it fills
+  // the rest of that row (same gap as between buttons, right edge flush) and later rows stay full.
+  const SEARCH_MIN_WIDTH = 160
+  const layoutSearch = () => {
+    const items = Array.from(tools.children).filter((child): child is HTMLElement => child !== search && child instanceof HTMLElement)
+    const gap = parseFloat(getComputedStyle(tools).columnGap) || 0
+    const available = tools.clientWidth
+    let used = 0
+    let fitting = 0
+    for (const item of items) {
+      const next = used + item.offsetWidth + gap
+      if (next + SEARCH_MIN_WIDTH > available) break
+      used = next
+      fitting += 1
+    }
+    items.forEach((item, index) => { item.style.order = index < fitting ? '0' : '2' })
+    search.style.order = '1'
+  }
+  const toolbarResizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(layoutSearch)
+  toolbarResizeObserver?.observe(tools)
+  document.fonts?.ready.then(layoutSearch).catch(() => {})
+  layoutSearch()
 
   const imageInput = document.createElement('input')
   imageInput.type = 'file'
@@ -246,7 +285,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openTablePopover(): void {
-    if (!editor.isEditable) return
+    if (!canEditStructure(editor)) return
     if (!tablePopover.hidden) {
       closeTablePopover()
       return
@@ -325,7 +364,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   const syncTableContextPopover = () => {
-    if (!editor.isEditable || !editor.isActive('table')) {
+    if (!canEditStructure(editor) || !editor.isActive('table')) {
       tableContextPopover.hidden = true
       window.removeEventListener('resize', positionTableContextPopover)
       document.removeEventListener('scroll', positionTableContextPopover, true)
@@ -413,7 +452,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openImagePopover(): void {
-    if (!editor.isEditable) return
+    if (!canEditStructure(editor)) return
     if (!imagePopover.hidden) return
     const image = selectedImageElement()
     if (!image) return
@@ -557,7 +596,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openLinkPopover(toggle = true): void {
-    if (!editor.isEditable) return
+    if (!canEditStructure(editor)) return
     if (!linkPopover.hidden && toggle) {
       closeLinkPopover()
       return
@@ -729,7 +768,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     labelPopover.setAttribute('aria-label', mode === 'view' ? `Метка «${name}»` : 'Установить метку')
     labelChip.textContent = name
     labelChip.dataset.label = name
-    labelViewActions.hidden = !editor.isEditable
+    labelViewActions.hidden = !canEditStructure(editor)
     labelRemoveButtons.forEach((button) => { button.hidden = !labelIsExisting })
     labelInput.value = name
     renderLabelPresets(name)
@@ -745,7 +784,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openLabelEditor(): void {
-    if (!editor.isEditable) return
+    if (!canEditStructure(editor)) return
     if (!labelPopover.hidden && labelMode === 'edit') {
       closeLabelPopover()
       return
@@ -801,7 +840,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     if (event.metaKey || event.ctrlKey || event.shiftKey) return
     const found = findLabelAt(event)
     if (!found) return
-    if (!editor.state.selection.empty && editor.isEditable) return
+    if (!editor.state.selection.empty && canEditStructure(editor)) return
     event.stopPropagation()
     labelIsExisting = true
     showLabelPopover(found.range, found.name, 'view')
@@ -815,7 +854,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     applyLabel(labelInput.value)
   })
   labelEditButton.addEventListener('click', () => {
-    if (!labelRange || !editor.isEditable) return
+    if (!labelRange || !canEditStructure(editor)) return
     showLabelPopover(labelRange, labelChip.textContent ?? '', 'edit')
   })
   labelRemoveButtons.forEach((button) => button.addEventListener('click', () => {
@@ -837,13 +876,14 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   document.addEventListener('click', handleLabelOutsideClick)
 
   const refresh = () => {
-    const editable = editor.isEditable
+    const editable = canEditStructure(editor)
     formatButton.disabled = !editable
     for (const [action, button] of buttons) {
       if (action !== 'toc') button.disabled = !editable
     }
-    buttons.get('undo')!.disabled = !editable || !editor.can().undo()
-    buttons.get('redo')!.disabled = !editable || !editor.can().redo()
+    // Undo/redo stay available while filling a template.
+    buttons.get('undo')!.disabled = !editor.isEditable || !editor.can().undo()
+    buttons.get('redo')!.disabled = !editor.isEditable || !editor.can().redo()
     syncTableContextPopover()
     if (!editable || !editor.isActive('image')) closeImagePopover()
     else if (imagePopover.hidden) openImagePopover()
@@ -923,6 +963,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     document.removeEventListener('click', handleLabelOutsideClick)
     closeLabelPopover()
     labelPopover.remove()
+    toolbarResizeObserver?.disconnect()
     host.replaceChildren()
     host.classList.remove('ophx-toolbar')
   }
