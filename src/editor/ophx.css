@@ -162,7 +162,9 @@
 .ophx-editor-surface .ophx-field:focus { border-bottom-style: solid; }
 .ophx-editor-surface .ophx-field:empty::before { content: attr(data-ophx-label); color: #aaa; }
 /* Template fill mode: only fields accept input, so they are highlighted and the rest reads as static text. */
-.ophx-editor-surface[data-ophx-mode="fill"] { cursor: default; }
+/* No visible text cursor outside fields: the text there cannot be edited (it can still be selected and copied). */
+.ophx-editor-surface[data-ophx-mode="fill"] { cursor: default; caret-color: transparent; }
+.ophx-editor-surface[data-ophx-mode="fill"] .ophx-field { caret-color: #242733; }
 .ophx-editor-surface[data-ophx-mode="fill"] .ophx-field {
   border-bottom: 1px solid #1e88c4;
   border-radius: 3px 3px 0 0;
@@ -172,6 +174,17 @@
   transition: background-color 0.12s ease;
 }
 .ophx-editor-surface[data-ophx-mode="fill"] .ophx-field:hover { background: #e1effa; }
+/* The field being filled: stronger outline, and its label placeholder disappears. */
+.ophx-editor-surface[data-ophx-mode="fill"] .ophx-field.ophx-field--active[data-ophx-field][contenteditable] {
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(30, 136, 196, 0.35);
+}
+.ophx-editor-surface[data-ophx-mode="fill"] .ophx-field.ophx-field--active[data-ophx-field][contenteditable]:empty::before { content: "\200b"; }
+.ophx-editor-surface[data-ophx-mode="fill"] .ophx-field.ophx-field--active[data-ophx-field][contenteditable]:empty {
+  display: inline-block;
+  min-width: 3em;
+  vertical-align: bottom;
+}
 .ophx-editor-surface[data-ophx-mode="fill"] .ophx-field[data-ophx-required="true"]:empty {
   border-bottom-color: #d0505e;
   background: #fdf0f1;

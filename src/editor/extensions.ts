@@ -3,6 +3,8 @@ import Heading from '@tiptap/extension-heading'
 import Image from '@tiptap/extension-image'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import type { EditorState } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import type { Step } from '@tiptap/pm/transform'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 
@@ -602,6 +604,102 @@ function stepStaysInsideField(doc: ProseMirrorNode, step: Step): boolean {
   return Boolean(field && from >= field.from && to <= field.to)
 }
 
+/**
+ * Clamp a range to the template field it belongs to. An empty range directly next to an inline
+ * field is moved inside it (browsers often report the caret just outside an empty span).
+ */
+function rangeInsideField(doc: ProseMirrorNode, from: number, to: number): { from: number; to: number } | null {
+  const field = fieldRangeAt(doc, from)
+  if (field) return to <= field.to ? { from, to } : null
+  if (from !== to) return null
+  const $pos = doc.resolve(from)
+  if ($pos.nodeAfter && FIELD_NODE_TYPES.has($pos.nodeAfter.type.name)) return { from: from + 1, to: from + 1 }
+  if ($pos.nodeBefore && FIELD_NODE_TYPES.has($pos.nodeBefore.type.name)) return { from: from - 1, to: from - 1 }
+  return null
+}
+
+function targetFieldRange(state: EditorState): { from: number; to: number } | null {
+  return rangeInsideField(state.doc, state.selection.from, state.selection.to)
+}
+
+/** The document range an input event acts on: the browser's target range, else the selection. */
+function eventRange(view: EditorView, event: InputEvent): { from: number; to: number } {
+  const [range] = event.getTargetRanges?.() ?? []
+  if (range) {
+    try {
+      const from = view.posAtDOM(range.startContainer, range.startOffset)
+      const to = view.posAtDOM(range.endContainer, range.endOffset)
+      return { from: Math.min(from, to), to: Math.max(from, to) }
+    } catch {
+      // Fall back to the editor selection below.
+    }
+  }
+  return { from: view.state.selection.from, to: view.state.selection.to }
+}
+
+/**
+ * In fill mode typing and deleting are applied to the document model directly, clamped to the
+ * current field. This works in empty fields and never lets the browser touch text outside fields.
+ */
+function handleFillInput(view: EditorView, event: InputEvent): boolean {
+  const type = event.inputType
+  if (type === 'insertCompositionText') return false
+  const { doc } = view.state
+
+  if (type === 'insertText' || type === 'insertReplacementText') {
+    event.preventDefault()
+    const text = event.data ?? event.dataTransfer?.getData('text/plain') ?? ''
+    const { from, to } = eventRange(view, event)
+    const target = rangeInsideField(doc, from, to) ?? targetFieldRange(view.state)
+    if (target && text) view.dispatch(view.state.tr.insertText(text, target.from, target.to).scrollIntoView())
+    return true
+  }
+
+  if (type.startsWith('delete')) {
+    event.preventDefault()
+    let { from, to } = eventRange(view, event)
+    if (from === to) {
+      // No target range reported: delete one character next to the cursor.
+      if (type.includes('Backward')) from -= 1
+      else to += 1
+    }
+    // Keep the side where the cursor is and cut the range at that field's boundary.
+    const anchor = type.includes('Forward') ? from : to
+    const field = fieldRangeAt(doc, anchor)
+    if (!field) return true
+    const start = Math.max(from, field.from)
+    const end = Math.min(to, field.to)
+    if (end > start) view.dispatch(view.state.tr.delete(start, end).scrollIntoView())
+    return true
+  }
+
+  // Paragraphs, line breaks, drops etc. would change the structure around fields.
+  if (type.startsWith('insert')) {
+    event.preventDefault()
+    return true
+  }
+  return false
+}
+
+/** Clicking an empty field puts the cursor inside it (an empty inline element cannot hold a caret). */
+function handleFillMouseDown(view: EditorView, event: MouseEvent): boolean {
+  const target = event.target instanceof Element ? event.target : null
+  const fieldElement = target?.closest('.ophx-field')
+  if (!fieldElement || !view.dom.contains(fieldElement) || fieldElement.textContent) return false
+  event.preventDefault()
+  const position = view.posAtDOM(fieldElement, 0)
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, position)))
+  view.focus()
+  return true
+}
+
+function activeFieldDecorations(state: EditorState): DecorationSet {
+  const field = targetFieldRange(state)
+  const range = field && fieldRangeAt(state.doc, field.from)
+  if (!range) return DecorationSet.empty
+  return DecorationSet.create(state.doc, [Decoration.node(range.from - 1, range.to + 1, { class: 'ophx-field--active' })])
+}
+
 function fieldPositions(doc: ProseMirrorNode): Array<{ from: number; to: number }> {
   const fields: Array<{ from: number; to: number }> = []
   doc.descendants((node, position) => {
@@ -661,8 +759,24 @@ export const TemplateFill = Extension.create<Record<string, never>, TemplateFill
           if (transaction.getMeta(TEMPLATE_FILL_ALLOW_META)) return true
           return transaction.steps.every((step, index) => stepStaysInsideField(transaction.docs[index], step))
         },
+        // A click right next to an inline field (outside its span) moves the cursor into the field.
+        // Only pointer selections are adjusted, so arrow keys can still leave a field.
+        appendTransaction(transactions, _oldState, newState) {
+          if (!storage.enabled || !newState.selection.empty) return null
+          if (!transactions.some((transaction) => transaction.selectionSet && transaction.getMeta('pointer'))) return null
+          const { from } = newState.selection
+          if (fieldRangeAt(newState.doc, from)) return null
+          const target = rangeInsideField(newState.doc, from, from)
+          if (!target) return null
+          return newState.tr.setSelection(TextSelection.create(newState.doc, target.from))
+        },
         props: {
           attributes: (): Record<string, string> => (storage.enabled ? { 'data-ophx-mode': 'fill' } : {}),
+          decorations: (state) => (storage.enabled ? activeFieldDecorations(state) : DecorationSet.empty),
+          handleDOMEvents: {
+            beforeinput: (view, event) => storage.enabled && handleFillInput(view, event as InputEvent),
+            mousedown: (view, event) => storage.enabled && handleFillMouseDown(view, event),
+          },
         },
       }),
     ]
