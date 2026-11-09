@@ -34,8 +34,9 @@ const BUTTONS: Array<{ action: string; label: string; title: string }> = [
   { action: 'link', label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.7 1.7"/><path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3 3A4.5 4.5 0 0 0 11 19.9l1.7-1.7"/></svg>', title: 'Добавить ссылку' },
   { action: 'image', label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>', title: 'Вставить изображение' },
   { action: 'table', label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>', title: 'Вставить таблицу' },
-  { action: 'label', label: 'Метка', title: 'Выделить текст меткой' },
-  { action: 'toc', label: 'Содержание', title: 'Содержание документа' },
+  // Временно скрыты: метка и содержание. Код кнопок оставлен, чтобы вернуть их одной строкой.
+  // { action: 'label', label: 'Метка', title: 'Выделить текст меткой' },
+  // { action: 'toc', label: 'Содержание', title: 'Содержание документа' },
   { action: 'undo', label: '↶', title: 'Отменить (⌘/Ctrl+Z)' },
   { action: 'redo', label: '↷', title: 'Повторить (⌘/Ctrl+Shift+Z)' },
 ]
@@ -718,7 +719,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   const labelEditButton = labelPopover.querySelector<HTMLButtonElement>('[data-label-edit]')!
   const labelRemoveButtons = labelPopover.querySelectorAll<HTMLButtonElement>('[data-label-remove]')
   const labelViewActions = labelPopover.querySelector<HTMLElement>('.ophx-label-popover__view-actions')!
-  const labelButton = buttons.get('label')!
+  const labelButton = buttons.get('label')
   let labelRange: { from: number; to: number } | null = null
   let labelMode: 'view' | 'edit' = 'edit'
   let labelIsExisting = false
@@ -730,7 +731,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
 
   function closeLabelPopover(): void {
     labelPopover.hidden = true
-    labelButton.setAttribute('aria-expanded', 'false')
+    labelButton?.setAttribute('aria-expanded', 'false')
     window.removeEventListener('resize', positionLabelPopover)
     document.removeEventListener('scroll', positionLabelPopover, true)
   }
@@ -773,7 +774,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     labelInput.value = name
     renderLabelPresets(name)
     labelPopover.hidden = false
-    labelButton.setAttribute('aria-expanded', String(mode === 'edit'))
+    labelButton?.setAttribute('aria-expanded', String(mode === 'edit'))
     positionLabelPopover()
     window.addEventListener('resize', positionLabelPopover)
     document.addEventListener('scroll', positionLabelPopover, true)
@@ -810,8 +811,8 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     closeLabelPopover()
   }
 
-  labelButton.setAttribute('aria-haspopup', 'dialog')
-  labelButton.setAttribute('aria-expanded', 'false')
+  labelButton?.setAttribute('aria-haspopup', 'dialog')
+  labelButton?.setAttribute('aria-expanded', 'false')
 
   const findLabelAt = (event: MouseEvent) => {
     const target = event.target as HTMLElement
@@ -871,7 +872,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   })
   const handleLabelOutsideClick = (event: MouseEvent) => {
     const target = event.target as Node
-    if (!labelPopover.contains(target) && !labelButton.contains(target)) closeLabelPopover()
+    if (!labelPopover.contains(target) && !labelButton?.contains(target)) closeLabelPopover()
   }
   document.addEventListener('click', handleLabelOutsideClick)
 
@@ -895,7 +896,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     buttons.get('italic')!.classList.toggle('is-active', editor.isActive('italic'))
     buttons.get('underline')!.classList.toggle('is-active', editor.isActive('underline'))
     buttons.get('strike')!.classList.toggle('is-active', editor.isActive('strike'))
-    buttons.get('label')!.classList.toggle('is-active', editor.isActive('label'))
+    buttons.get('label')?.classList.toggle('is-active', editor.isActive('label'))
     if (!editable) closeLinkPopover()
     if (!editable && labelMode === 'edit') closeLabelPopover()
     else if (!labelPopover.hidden) positionLabelPopover()
