@@ -182,6 +182,29 @@
   font: 13px/1.4 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
 }
+.ophx-toolbar__search {
+  box-sizing: border-box;
+  width: 160px;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 5px 9px;
+  border: 1px solid #dfe3ec;
+  border-radius: 6px;
+  background: #fff;
+  color: #242733;
+  font: 12px/1.4 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.ophx-toolbar__search::placeholder { color: #a4a8b3; }
+.ophx-toolbar__search:hover { border-color: #cdd2de; }
+.ophx-toolbar__search:focus {
+  border-color: #1e88c4;
+  box-shadow: 0 0 0 2px rgba(30, 136, 196, 0.16);
+}
+@media (max-width: 700px) {
+  .ophx-toolbar__search { width: 100%; margin-left: 0; }
+}
 .ophx-toolbar__style-wrap {
   position: relative;
   display: inline-flex;
