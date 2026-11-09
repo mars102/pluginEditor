@@ -139,6 +139,7 @@ export const OphxImage = Image.extend({
       }
 
       const updateWidth = (width: number) => {
+        if (!editor.isEditable) return
         const position = typeof getPos === 'function' ? getPos() : undefined
         if (typeof position !== 'number') return
         const existing = editor.state.doc.nodeAt(position)
@@ -161,6 +162,7 @@ export const OphxImage = Image.extend({
         if (resizeHandle.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId)
       }
       resizeHandle.addEventListener('pointerdown', (event) => {
+        if (!editor.isEditable) return
         event.preventDefault()
         event.stopPropagation()
         dragStartX = event.clientX
@@ -172,6 +174,7 @@ export const OphxImage = Image.extend({
       resizeHandle.addEventListener('pointerup', stopDragging)
       resizeHandle.addEventListener('pointercancel', stopDragging)
       resizeHandle.addEventListener('keydown', (event) => {
+        if (!editor.isEditable) return
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
         event.preventDefault()
         const currentWidth = Number(currentNode.attrs.width) || Math.round(image.getBoundingClientRect().width)
@@ -321,6 +324,62 @@ export const CollapsibleHeading = Heading.extend({
         renderHTML: (attributes: { collapsed?: boolean }) =>
           attributes.collapsed ? { 'data-collapsed': 'true' } : {},
       },
+    }
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      let currentNode = node
+      const heading = document.createElement(`h${node.attrs.level}`)
+      heading.className = 'ophx-heading'
+
+      const toggle = document.createElement('button')
+      toggle.type = 'button'
+      toggle.className = 'ophx-heading__toggle'
+      toggle.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 4.5 4.5-4.5 4.5"/></svg>'
+
+      const content = document.createElement('span')
+      content.className = 'ophx-heading__content'
+      heading.append(content, toggle)
+
+      const updateToggle = () => {
+        const collapsed = Boolean(currentNode.attrs.collapsed)
+        toggle.setAttribute('aria-expanded', String(!collapsed))
+        toggle.setAttribute('aria-label', collapsed ? 'Развернуть раздел' : 'Свернуть раздел')
+        toggle.title = collapsed ? 'Развернуть раздел' : 'Свернуть раздел'
+        heading.dataset.collapsed = String(collapsed)
+      }
+
+      const toggleCollapsed = (event: MouseEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!editor.isEditable) return
+        const position = typeof getPos === 'function' ? getPos() : undefined
+        if (typeof position !== 'number') return
+        const liveNode = editor.state.doc.nodeAt(position)
+        if (!liveNode || liveNode.type.name !== 'heading') return
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, {
+          ...liveNode.attrs,
+          collapsed: !liveNode.attrs.collapsed,
+        }))
+      }
+
+      toggle.addEventListener('mousedown', (event) => event.preventDefault())
+      toggle.addEventListener('click', toggleCollapsed)
+      updateToggle()
+
+      return {
+        dom: heading,
+        contentDOM: content,
+        update(updatedNode) {
+          if (updatedNode.type !== currentNode.type || updatedNode.attrs.level !== currentNode.attrs.level) return false
+          currentNode = updatedNode
+          updateToggle()
+          return true
+        },
+        stopEvent(event) {
+          return toggle.contains(event.target as globalThis.Node)
+        },
+      }
     }
   },
   addProseMirrorPlugins() {

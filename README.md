@@ -1,4 +1,4 @@
-# @ophx/editor
+# @phenix1024/editor
 
 ## Установка
 
@@ -89,30 +89,114 @@ npm run build
 
 `npm run build` собирает демо в `dist-demo/` и библиотеку/standalone-бандлы в `dist/`.
 
-## Подключение без фреймворка
+## Быстрый старт: создание, сохранение и открытие
+
+Разместите контейнеры и элементы управления в своей разметке (кнопки сохранения/открытия принадлежат приложению, не библиотеке):
+
+```html
+<div id="toolbar"></div>
+<div id="editor"></div>
+<input id="document-title" value="Мой документ">
+<button id="save" type="button">Сохранить .ophx</button>
+<button id="open" type="button">Открыть .ophx</button>
+<button id="toggle-edit-mode" type="button" aria-pressed="true">Режим: редактирование</button>
+<input id="open-file" type="file" accept=".ophx,.zip,application/zip" hidden>
+```
 
 ```ts
-import { OphxEditor, mountToolbar } from '@ophx/editor'
-import '@ophx/editor/style.css'
+import { OphxEditor, mountToolbar } from '@phenix1024/editor'
+import '@phenix1024/editor/style.css'
 
+const editorHost = document.querySelector<HTMLElement>('#editor')!
+const toolbarHost = document.querySelector<HTMLElement>('#toolbar')!
+const fileInput = document.querySelector<HTMLInputElement>('#open-file')!
+const title = document.querySelector<HTMLInputElement>('#document-title')!
+
+// Инициализируйте один экземпляр на один DOM-контейнер.
 const editor = new OphxEditor({
-  element: document.querySelector('#editor')!,
-  content: '<h1>Документ</h1><p>Текст…</p>',
-  onUpdate: ({ editor }) => autosave(editor.getHTML()),
+  element: editorHost,
+  content: localStorage.getItem('draft-html') ?? '<h1>Новый документ</h1><p>Начните писать…</p>',
+  onUpdate: ({ editor: tiptap }) => {
+    // Для небольших документов; для больших файлов используйте IndexedDB или сервер.
+    localStorage.setItem('draft-html', tiptap.getHTML())
+  },
 })
-const unmountToolbar = mountToolbar(document.querySelector('#toolbar')!, editor.editor)
+const unmountToolbar = mountToolbar(toolbarHost, editor.editor)
 
-// При размонтировании host:
-unmountToolbar()
-editor.destroy()
+const modeButton = document.querySelector<HTMLButtonElement>('#toggle-edit-mode')!
+modeButton.addEventListener('click', () => {
+  const editable = !editor.isEditable
+  editor.setEditable(editable)
+  modeButton.setAttribute('aria-pressed', String(editable))
+  modeButton.textContent = editable ? 'Режим: редактирование' : 'Режим: просмотр'
+})
+
+document.querySelector('#save')!.addEventListener('click', async () => {
+  // downloadOphx создаёт архив .ophx и запускает браузерное скачивание.
+  await editor.downloadOphx({
+    filename: 'Мой-документ', // имя без расширения .ophx
+    title: title.value || 'Мой документ',
+    styles: { 'default.css': 'body{font-family:Arial,sans-serif;line-height:1.6}' },
+  })
+})
+
+document.querySelector('#open')!.addEventListener('click', () => fileInput.click())
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files?.[0]
+  if (!file) return
+  try {
+    // Загружает архив в редактор и возвращает title, filename, styles и HTML.
+    const document = await editor.loadOphx(file)
+    title.value = document.title
+  } catch (error) {
+    console.error('Не удалось открыть документ', error)
+  } finally {
+    fileInput.value = ''
+  }
+})
+
+// Вызовите эту функцию при размонтировании компонента или удалении редактора.
+function disposeEditor() {
+  unmountToolbar()
+  editor.destroy()
+}
 ```
+
+`loadOphx()` принимает `File` (он является `Blob`) и разбирает архив до замены текущего документа. Если импорт успешен, редактор получает HTML, а имя, заголовок, стили и `bodyContentEditable` запоминаются как значения по умолчанию для следующего `saveOphx()`/`downloadOphx()`. Переданные в метод параметры переопределяют импортированные значения.
+
+Режим просмотра включается через `editor.setEditable(false)`, обратно — через `editor.setEditable(true)`. При использовании готового `mountToolbar()` инструменты форматирования, изменения таблиц и изображений автоматически отключаются; поиск и содержание остаются доступны. Кнопки загрузки и скачивания в верхней панели принадлежат вашему приложению и остаются активными.
+
+Если приложение само управляет интерфейсом сохранения, используйте `const blob = await editor.saveOphx(options)`, чтобы получить архив без автоматического скачивания, и сохраните Blob на сервер или в файловое хранилище. Для ручного скачивания также экспортируется `downloadBlob(blob, filename)`.
+
+## Стандартные операции редактора
+
+```ts
+const html = editor.getHTML()
+const json = editor.getJSON()
+const plainText = editor.getText()
+
+editor.setContent('<h1>Новый текст</h1>') // не вызывает onUpdate по умолчанию
+editor.setContent(html, { emitUpdate: true })
+editor.clearContent()
+editor.focus('end') // также: 'start', 'all' или позиция
+editor.blur()
+editor.setEditable(false)
+
+if (editor.canUndo()) editor.undo()
+if (editor.canRedo()) editor.redo()
+
+const empty = editor.isEmpty
+const editable = editor.isEditable
+```
+
+`getHTML()` — подходящий формат для обычного автосохранения/синхронизации, `getJSON()` — структурированное представление Tiptap. `.ophx` нужен, если требуется переносимый архив со стилями и изображениями; это не то же самое, что HTML-черновик.
 
 ## Подключение в React
 
 ```tsx
 import { useEffect, useRef } from 'react'
-import { OphxEditor, mountToolbar } from '@ophx/editor'
-import '@ophx/editor/style.css'
+import { OphxEditor, mountToolbar } from '@phenix1024/editor'
+import '@phenix1024/editor/style.css'
 
 export function DocumentEditor() {
   const editorHost = useRef<HTMLDivElement>(null)
@@ -143,9 +227,9 @@ export function DocumentEditor() {
 ```
 
 ```ts
-import { exportOphx, importOphx, downloadBlob } from '@phenix1024/editor'
+import { downloadBlob } from '@phenix1024/editor'
 
-const archive = await exportOphx(editor.getHTML(), {
+const archive = await editor.saveOphx({
   filename: 'Договор', // basename должен совпадать с именем скачиваемого .ophx
   title: 'Договор поставки',
   styles: { 'default.css': cssText },
@@ -153,14 +237,9 @@ const archive = await exportOphx(editor.getHTML(), {
 })
 downloadBlob(archive, 'Договор.ophx')
 
-const document = await importOphx(file)
-editor.setContent(document.html)
-const updatedArchive = await exportOphx(editor.getHTML(), {
-  filename: document.filename,
-  title: document.title,
-  styles: document.styles,
-  bodyContentEditable: document.bodyContentEditable,
-})
+const document = await editor.loadOphx(file)
+// После импорта метаданные архива используются автоматически.
+const updatedArchive = await editor.saveOphx()
 downloadBlob(updatedArchive, `${document.filename}.ophx`)
 // document.styles содержит все подключённые локальные CSS-файлы.
 // document.css — удобный алиас первого stylesheet.
@@ -180,7 +259,9 @@ downloadBlob(updatedArchive, `${document.filename}.ophx`)
 
 - `new OphxEditor({ element, content?, placeholder?, editable?, onUpdate?, extensions? })`
 - `editor.editor` — исходный Tiptap `Editor` для команд и подписок.
-- `getHTML()`, `getJSON()`, `setContent(content)`, `setSearchQuery(query)`, `destroy()`.
+- `getHTML()`, `getJSON()`, `getText()`, `setContent(content, options?)`, `clearContent(options?)`, `setSearchQuery(query)`.
+- `focus(position?)`, `blur()`, `setEditable(value)`, `isEditable`, `isEmpty`, `undo()`, `redo()`, `canUndo()`, `canRedo()`.
+- `loadOphx(file)` загружает архив и возвращает `OphxDocument`; `saveOphx(options?)` возвращает Promise с Blob архива; `downloadOphx(options?)` скачивает его в браузере.
 - `mountToolbar(host, editor, { onInsertImage? })` возвращает функцию очистки.
 - `exportOphx(html, { filename, title?, styles?, assets?, bodyContentEditable? })`, `importOphx(file)`, `downloadBlob(blob, filename)`.
 - `getFields()` и `getMissingRequiredFields()` возвращают валидные уникальные поля шаблона.

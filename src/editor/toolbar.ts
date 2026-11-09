@@ -1,4 +1,4 @@
-import type { Editor } from '@tiptap/core'
+import { getMarkRange, type Editor } from '@tiptap/core'
 import type { Transaction } from '@tiptap/pm/state'
 
 export interface ToolbarOptions {
@@ -30,10 +30,9 @@ const BUTTONS: Array<{ action: string; label: string; title: string }> = [
     label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 6h14M9 12h10M5 18h14"/><path d="M15 9l4 3-4 3"/></svg>',
     title: 'Увеличить отступ',
   },
-  { action: 'link', label: 'Ссылка', title: 'Добавить ссылку' },
+  { action: 'link', label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.7 1.7"/><path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3 3A4.5 4.5 0 0 0 11 19.9l1.7-1.7"/></svg>', title: 'Добавить ссылку' },
   { action: 'image', label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></svg>', title: 'Вставить изображение' },
-  { action: 'table', label: 'Таблица', title: 'Вставить таблицу' },
-  { action: 'collapse', label: 'Свернуть', title: 'Свернуть/развернуть раздел' },
+  { action: 'table', label: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>', title: 'Вставить таблицу' },
   { action: 'label', label: 'Метка', title: 'Выделить текст меткой' },
   { action: 'toc', label: 'Содержание', title: 'Содержание документа' },
   { action: 'undo', label: '↶', title: 'Отменить (⌘/Ctrl+Z)' },
@@ -55,6 +54,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     setPopupVisible(formatMenu, false)
     formatButton.setAttribute('aria-expanded', 'false')
     setPopupVisible(toc, false)
+    buttons.get('toc')?.setAttribute('aria-expanded', 'false')
   }
 
   const formatWrap = document.createElement('div')
@@ -153,8 +153,11 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     button.title = item.title
     button.setAttribute('aria-label', item.title)
     button.addEventListener('mousedown', (event) => event.preventDefault())
-    button.addEventListener('click', () => {
-      if (item.action === 'toc') return
+    button.addEventListener('click', (event) => {
+      if (item.action === 'toc') {
+        event.stopPropagation()
+        return
+      }
       if (item.action === 'link') {
         openLinkPopover()
         return
@@ -163,6 +166,12 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
         openTablePopover()
         return
       }
+      if (item.action === 'label') {
+        event.stopPropagation()
+        openLabelEditor()
+        return
+      }
+      if (!editor.isEditable) return
       runAction(item.action, editor, imageInput, toc)
     })
     buttons.set(item.action, button)
@@ -237,6 +246,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openTablePopover(): void {
+    if (!editor.isEditable) return
     if (!tablePopover.hidden) {
       closeTablePopover()
       return
@@ -315,7 +325,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   const syncTableContextPopover = () => {
-    if (!editor.isActive('table')) {
+    if (!editor.isEditable || !editor.isActive('table')) {
       tableContextPopover.hidden = true
       window.removeEventListener('resize', positionTableContextPopover)
       document.removeEventListener('scroll', positionTableContextPopover, true)
@@ -403,6 +413,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openImagePopover(): void {
+    if (!editor.isEditable) return
     if (!imagePopover.hidden) return
     const image = selectedImageElement()
     if (!image) return
@@ -476,12 +487,15 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
 
   const tocButton = buttons.get('toc')
   if (tocButton) {
+    tocButton.setAttribute('aria-haspopup', 'true')
+    tocButton.setAttribute('aria-expanded', 'false')
     tocButton.addEventListener('click', () => {
       const isHidden = toc.hidden || toc.style.display === 'none'
       if (!isHidden) closeAllPopups()
       else {
         closeMenu()
         setPopupVisible(toc, true)
+        tocButton.setAttribute('aria-expanded', 'true')
       }
     })
   }
@@ -543,6 +557,7 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
 
   function openLinkPopover(toggle = true): void {
+    if (!editor.isEditable) return
     if (!linkPopover.hidden && toggle) {
       closeLinkPopover()
       return
@@ -629,11 +644,208 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   }
   document.addEventListener('click', handleLinkOutsideClick)
 
+  const LABEL_PRESETS = ['важно', 'идея']
+  const labelPopover = document.createElement('form')
+  labelPopover.className = 'ophx-link-popover ophx-label-popover'
+  labelPopover.setAttribute('role', 'dialog')
+  labelPopover.hidden = true
+  labelPopover.innerHTML = `
+    <span class="ophx-link-popover__arrow" aria-hidden="true"></span>
+    <div class="ophx-label-popover__view">
+      <span class="ophx-link-popover__label">Метка</span>
+      <div class="ophx-label-popover__name"><mark class="ophx-label-popover__chip"></mark></div>
+      <div class="ophx-link-popover__actions ophx-label-popover__view-actions">
+        <button class="ophx-link-popover__remove" type="button" data-label-remove>Удалить метку</button>
+        <button class="ophx-link-popover__submit" type="button" data-label-edit>Изменить</button>
+      </div>
+    </div>
+    <div class="ophx-label-popover__edit">
+      <label class="ophx-link-popover__label" for="ophx-label-name">Название метки</label>
+      <div class="ophx-link-popover__row">
+        <input class="ophx-link-popover__input" id="ophx-label-name" type="text" placeholder="Например, важно" autocomplete="off" maxlength="60">
+      </div>
+      <div class="ophx-label-popover__presets" role="group" aria-label="Быстрый выбор метки"></div>
+      <div class="ophx-link-popover__actions">
+        <button class="ophx-link-popover__remove" type="button" data-label-remove>Удалить метку</button>
+        <button class="ophx-link-popover__submit" type="submit">ОК</button>
+      </div>
+    </div>
+  `
+  document.body.append(labelPopover)
+
+  const labelInput = labelPopover.querySelector<HTMLInputElement>('#ophx-label-name')!
+  const labelChip = labelPopover.querySelector<HTMLElement>('.ophx-label-popover__chip')!
+  const labelPresets = labelPopover.querySelector<HTMLElement>('.ophx-label-popover__presets')!
+  const labelEditButton = labelPopover.querySelector<HTMLButtonElement>('[data-label-edit]')!
+  const labelRemoveButtons = labelPopover.querySelectorAll<HTMLButtonElement>('[data-label-remove]')
+  const labelViewActions = labelPopover.querySelector<HTMLElement>('.ophx-label-popover__view-actions')!
+  const labelButton = buttons.get('label')!
+  let labelRange: { from: number; to: number } | null = null
+  let labelMode: 'view' | 'edit' = 'edit'
+  let labelIsExisting = false
+
+  const positionLabelPopover = () => {
+    if (labelPopover.hidden || !labelRange) return
+    if (!positionPopoverAtRange(editor, labelPopover, labelRange)) closeLabelPopover()
+  }
+
+  function closeLabelPopover(): void {
+    labelPopover.hidden = true
+    labelButton.setAttribute('aria-expanded', 'false')
+    window.removeEventListener('resize', positionLabelPopover)
+    document.removeEventListener('scroll', positionLabelPopover, true)
+  }
+
+  function documentLabels(): string[] {
+    const names = new Set(LABEL_PRESETS)
+    editor.state.doc.descendants((node) => {
+      for (const mark of node.marks) {
+        if (mark.type.name === 'label' && mark.attrs.label) names.add(String(mark.attrs.label))
+      }
+    })
+    return [...names]
+  }
+
+  function renderLabelPresets(current: string): void {
+    labelPresets.replaceChildren()
+    for (const name of documentLabels()) {
+      const preset = document.createElement('button')
+      preset.type = 'button'
+      preset.className = 'ophx-label-popover__preset'
+      preset.classList.toggle('is-selected', name === current)
+      const swatch = document.createElement('mark')
+      swatch.dataset.label = name
+      swatch.textContent = name
+      preset.append(swatch)
+      preset.addEventListener('click', () => applyLabel(name))
+      labelPresets.append(preset)
+    }
+  }
+
+  function showLabelPopover(range: { from: number; to: number }, name: string, mode: 'view' | 'edit'): void {
+    labelRange = range
+    labelMode = mode
+    labelPopover.dataset.mode = mode
+    labelPopover.setAttribute('aria-label', mode === 'view' ? `Метка «${name}»` : 'Установить метку')
+    labelChip.textContent = name
+    labelChip.dataset.label = name
+    labelViewActions.hidden = !editor.isEditable
+    labelRemoveButtons.forEach((button) => { button.hidden = !labelIsExisting })
+    labelInput.value = name
+    renderLabelPresets(name)
+    labelPopover.hidden = false
+    labelButton.setAttribute('aria-expanded', String(mode === 'edit'))
+    positionLabelPopover()
+    window.addEventListener('resize', positionLabelPopover)
+    document.addEventListener('scroll', positionLabelPopover, true)
+    if (mode === 'edit') {
+      labelInput.focus()
+      labelInput.select()
+    }
+  }
+
+  function openLabelEditor(): void {
+    if (!editor.isEditable) return
+    if (!labelPopover.hidden && labelMode === 'edit') {
+      closeLabelPopover()
+      return
+    }
+    if (editor.state.selection.empty && editor.isActive('label')) {
+      editor.chain().extendMarkRange('label').run()
+    }
+    const { from, to, empty } = editor.state.selection
+    if (empty) return
+    labelIsExisting = editor.isActive('label')
+    const current = labelIsExisting ? String(editor.getAttributes('label').label ?? '') : ''
+    showLabelPopover({ from, to }, current, 'edit')
+  }
+
+  function applyLabel(name: string): void {
+    const label = name.trim()
+    if (!labelRange) return
+    if (!label) {
+      labelInput.focus()
+      return
+    }
+    editor.chain().focus().setTextSelection(labelRange).setMark('label', { label }).run()
+    closeLabelPopover()
+  }
+
+  labelButton.setAttribute('aria-haspopup', 'dialog')
+  labelButton.setAttribute('aria-expanded', 'false')
+
+  const findLabelAt = (event: MouseEvent) => {
+    const target = event.target as HTMLElement
+    const markElement = target.closest<HTMLElement>('mark')
+    if (!markElement || !editor.view.dom.contains(markElement) || target.closest('a[href]')) return null
+    const position = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
+    const labelType = editor.schema.marks.label
+    if (!position || !labelType) return null
+    const $pos = editor.state.doc.resolve(position.pos)
+    const range = getMarkRange($pos, labelType)
+      ?? (position.pos > 0 ? getMarkRange(editor.state.doc.resolve(position.pos - 1), labelType) : undefined)
+    if (!range) return null
+    let name = markElement.dataset.label ?? ''
+    editor.state.doc.nodesBetween(range.from, range.to, (node) => {
+      const mark = node.marks.find((item) => item.type === labelType)
+      if (mark) name = String(mark.attrs.label ?? name)
+    })
+    return { range, name }
+  }
+
+  const handleLabelPointerOver = (event: PointerEvent) => {
+    const markElement = (event.target as HTMLElement).closest<HTMLElement>('mark[data-label]')
+    if (markElement && editor.view.dom.contains(markElement)) markElement.title = `Метка: ${markElement.dataset.label}`
+  }
+  const handleEditorLabelClick = (event: MouseEvent) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return
+    const found = findLabelAt(event)
+    if (!found) return
+    if (!editor.state.selection.empty && editor.isEditable) return
+    event.stopPropagation()
+    labelIsExisting = true
+    showLabelPopover(found.range, found.name, 'view')
+  }
+  editor.view.dom.addEventListener('pointerover', handleLabelPointerOver)
+  editor.view.dom.addEventListener('click', handleEditorLabelClick)
+
+  labelPopover.addEventListener('mousedown', (event) => event.stopPropagation())
+  labelPopover.addEventListener('submit', (event) => {
+    event.preventDefault()
+    applyLabel(labelInput.value)
+  })
+  labelEditButton.addEventListener('click', () => {
+    if (!labelRange || !editor.isEditable) return
+    showLabelPopover(labelRange, labelChip.textContent ?? '', 'edit')
+  })
+  labelRemoveButtons.forEach((button) => button.addEventListener('click', () => {
+    if (!labelRange) return
+    editor.chain().focus().setTextSelection(labelRange).unsetMark('label').run()
+    closeLabelPopover()
+  }))
+  labelPopover.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeLabelPopover()
+      editor.commands.focus()
+    }
+  })
+  const handleLabelOutsideClick = (event: MouseEvent) => {
+    const target = event.target as Node
+    if (!labelPopover.contains(target) && !labelButton.contains(target)) closeLabelPopover()
+  }
+  document.addEventListener('click', handleLabelOutsideClick)
+
   const refresh = () => {
-    buttons.get('undo')!.disabled = !editor.can().undo()
-    buttons.get('redo')!.disabled = !editor.can().redo()
+    const editable = editor.isEditable
+    formatButton.disabled = !editable
+    for (const [action, button] of buttons) {
+      if (action !== 'toc') button.disabled = !editable
+    }
+    buttons.get('undo')!.disabled = !editable || !editor.can().undo()
+    buttons.get('redo')!.disabled = !editable || !editor.can().redo()
     syncTableContextPopover()
-    if (!editor.isActive('image')) closeImagePopover()
+    if (!editable || !editor.isActive('image')) closeImagePopover()
     else if (imagePopover.hidden) openImagePopover()
     else {
       syncImagePopover()
@@ -643,6 +855,10 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     buttons.get('italic')!.classList.toggle('is-active', editor.isActive('italic'))
     buttons.get('underline')!.classList.toggle('is-active', editor.isActive('underline'))
     buttons.get('strike')!.classList.toggle('is-active', editor.isActive('strike'))
+    buttons.get('label')!.classList.toggle('is-active', editor.isActive('label'))
+    if (!editable) closeLinkPopover()
+    if (!editable && labelMode === 'edit') closeLabelPopover()
+    else if (!labelPopover.hidden) positionLabelPopover()
     const heading = editor.getAttributes('heading').level as number | undefined
     const styleValue = heading ? String(heading) : editor.isActive('paragraph') ? 'p' : 'p'
     const styleLabel = heading ? `Заголовок ${heading}` : 'Обычный текст'
@@ -681,10 +897,12 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
   const handleSelectionUpdate = () => refresh()
   editor.on('transaction', handleTransaction)
   editor.on('selectionUpdate', handleSelectionUpdate)
+  editor.view.dom.addEventListener('ophx:editablechange', refresh)
   refresh()
   return () => {
     editor.off('transaction', handleTransaction)
     editor.off('selectionUpdate', handleSelectionUpdate)
+    editor.view.dom.removeEventListener('ophx:editablechange', refresh)
     document.removeEventListener('click', handleTableOutsideClick)
     closeTablePopover()
     tablePopover.remove()
@@ -700,8 +918,35 @@ export function mountToolbar(host: HTMLElement, editor: Editor, options: Toolbar
     document.removeEventListener('click', handleLinkOutsideClick)
     closeLinkPopover()
     linkPopover.remove()
+    editor.view.dom.removeEventListener('pointerover', handleLabelPointerOver)
+    editor.view.dom.removeEventListener('click', handleEditorLabelClick)
+    document.removeEventListener('click', handleLabelOutsideClick)
+    closeLabelPopover()
+    labelPopover.remove()
     host.replaceChildren()
     host.classList.remove('ophx-toolbar')
+  }
+}
+
+/** Places a fixed popover under (or above) a document range. Returns false if the range is gone. */
+function positionPopoverAtRange(editor: Editor, popover: HTMLElement, range: { from: number; to: number }): boolean {
+  try {
+    const start = editor.view.coordsAtPos(range.from)
+    const end = editor.view.coordsAtPos(range.to)
+    const anchorX = (start.left + end.right) / 2
+    const viewportPadding = 8
+    const width = popover.offsetWidth
+    const height = popover.offsetHeight
+    const left = Math.max(viewportPadding, Math.min(anchorX - width / 2, window.innerWidth - width - viewportPadding))
+    const fitsBelow = end.bottom + height + 14 <= window.innerHeight - viewportPadding
+    const top = fitsBelow ? end.bottom + 12 : Math.max(viewportPadding, start.top - height - 12)
+    popover.style.left = `${left}px`
+    popover.style.top = `${top}px`
+    popover.dataset.placement = fitsBelow ? 'bottom' : 'top'
+    popover.style.setProperty('--ophx-link-arrow-left', `${Math.max(14, Math.min(anchorX - left, width - 14))}px`)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -748,17 +993,6 @@ function runAction(action: string, editor: Editor, imageInput: HTMLInputElement,
     case 'outdent': adjustIndent(editor, -1); break
     case 'image': {
       imageInput.click()
-      break
-    }
-    case 'collapse': {
-      if (!editor.isActive('heading')) return
-      const collapsed = Boolean(editor.getAttributes('heading').collapsed)
-      chain.updateAttributes('heading', { collapsed: !collapsed }).run()
-      break
-    }
-    case 'label': {
-      const label = window.prompt('Название метки', 'важно')
-      if (label?.trim()) chain.setMark('label', { label: label.trim() }).run()
       break
     }
     case 'toc': {

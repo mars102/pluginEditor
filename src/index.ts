@@ -1,6 +1,6 @@
 import './editor/ophx.css'
 
-export { OphxEditor, type OphxEditorOptions, type OphxFieldValue } from './editor/ophx-editor'
+export { OphxEditor, type OphxEditorOptions, type OphxFieldValue, type OphxSetContentOptions } from './editor/ophx-editor'
 export { mountToolbar, type ToolbarOptions } from './editor/toolbar'
 export {
 	exportOphx,

@@ -1,5 +1,5 @@
 import './demo.css'
-import { downloadBlob, exportOphx, importOphx, mountToolbar, OphxEditor } from './index'
+import { mountToolbar, OphxEditor } from './index'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const DEFAULT_DOCUMENT_CSS = `body{font-family:Arial,sans-serif;line-height:1.7;color:#24262d;max-width:900px;margin:48px auto;padding:0 24px}h1,h2,h3{line-height:1.25;color:#191b23}img{max-width:100%;height:auto}img[data-ophx-wrap="left"]{float:left;margin:4px 16px 12px 0}img[data-ophx-wrap="right"]{float:right;margin:4px 0 12px 16px}img[data-ophx-wrap="none"][data-ophx-align="center"]{display:block;margin-left:auto;margin-right:auto}img[data-ophx-wrap="none"][data-ophx-align="right"]{display:block;margin-left:auto;margin-right:0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dfe1e8;padding:8px}mark{background:#fff1a8}`
@@ -9,8 +9,9 @@ app.innerHTML = `
       <a class="brand" href="#" aria-label="Ophx Editor home"><span class="brand-mark">o</span><span>ophx<span class="brand-muted">/editor</span></span></a>
       <div class="document-name"><span class="status-dot"></span><span id="document-title">Новый документ</span><span class="saved-label" id="saved-label">Сохранено локально</span></div>
       <div class="top-actions">
-        <button class="quiet-button" id="open-document" type="button">Открыть .ophx</button>
-        <button class="primary-button" id="save-document" type="button"><span>↓</span> Экспорт .ophx</button>
+        <button class="quiet-button" id="open-document" type="button">Загрузить .ophx</button>
+        <button class="quiet-button" id="toggle-edit-mode" type="button" aria-pressed="true">Режим: редактирование</button>
+        <button class="primary-button" id="save-document" type="button"><span>↓</span> Сохранить .ophx</button>
         <input id="file-input" type="file" accept=".ophx,.zip,application/zip" hidden>
       </div>
     </header>
@@ -61,6 +62,21 @@ mountToolbar(toolbar, editor.editor, {
   onInsertImage: (file) => insertImage(file),
 })
 
+const editModeButton = document.querySelector<HTMLButtonElement>('#toggle-edit-mode')!
+const syncEditModeButton = (editable: boolean) => {
+  editModeButton.setAttribute('aria-pressed', String(editable))
+  editModeButton.textContent = editable ? 'Режим: редактирование' : 'Режим: просмотр'
+}
+syncEditModeButton(editor.isEditable)
+editModeButton.addEventListener('click', () => {
+  const editable = !editor.isEditable
+  editor.setEditable(editable)
+  syncEditModeButton(editable)
+  document.querySelector('#status-message')!.textContent = editable
+    ? 'Режим редактирования включён'
+    : 'Режим просмотра включён'
+})
+
 const title = document.querySelector<HTMLElement>('#document-title')!
 const fileInput = document.querySelector<HTMLInputElement>('#file-input')!
 document.querySelector('#open-document')!.addEventListener('click', () => fileInput.click())
@@ -68,12 +84,14 @@ fileInput.addEventListener('change', async () => {
   const file = fileInput.files?.[0]
   if (!file) return
   try {
-    const ophxDocument = await importOphx(file)
-    editor.setContent(ophxDocument.html)
+    const ophxDocument = await editor.loadOphx(file)
+    localStorage.setItem('ophx-editor-content', editor.getHTML())
+    updateCounts()
     documentStyles = ophxDocument.styles
     bodyContentEditable = ophxDocument.bodyContentEditable
     archiveFilename = safeFilename(ophxDocument.filename)
     title.textContent = ophxDocument.title
+    document.querySelector('#saved-label')!.textContent = 'Сохранено локально'
     document.querySelector('#status-message')!.textContent = 'Архив .ophx открыт'
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'Не удалось открыть файл .ophx')
@@ -82,13 +100,12 @@ fileInput.addEventListener('change', async () => {
 })
 
 document.querySelector('#save-document')!.addEventListener('click', async () => {
-  const blob = await exportOphx(editor.getHTML(), {
+  await editor.downloadOphx({
     filename: archiveFilename,
     title: title.textContent ?? 'Документ',
     styles: documentStyles,
     bodyContentEditable,
   })
-  downloadBlob(blob, `${archiveFilename}.ophx`)
   document.querySelector('#status-message')!.textContent = 'Архив .ophx экспортирован'
 })
 
